@@ -3079,7 +3079,8 @@ idbInit(()=>{
   state.showHome = getSavesIndex().length > 0;
   render();
 });
-document.getElementById('lw-header-logo').src = LOGO_SYMBOL;
+const _logoEl=document.getElementById('lw-header-logo');
+if(_logoEl) _logoEl.src = LOGO_SYMBOL;
 </script>
 </body>
 </html>

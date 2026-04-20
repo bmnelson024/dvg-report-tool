@@ -148,24 +148,36 @@ let _idb = null;
 const _dbCache = {};
 
 function idbInit(cb){
+  let called=false;
+  function done(){if(!called){called=true;cb();}}
+  // Safety net: if IDB hangs for any reason, render anyway after 2s
+  setTimeout(done,2000);
   try{
+    if(!window.indexedDB){done();return;}
     const req=indexedDB.open('leavenwealth_db',1);
-    req.onupgradeneeded=e=>{e.target.result.createObjectStore('items');};
-    req.onsuccess=e=>{
-      _idb=e.target.result;
-      // Request persistent storage so the browser won't silently evict IDB data under storage pressure
-      if(navigator.storage&&navigator.storage.persist) navigator.storage.persist();
-      const tx=_idb.transaction('items','readonly');
-      const store=tx.objectStore('items');
-      const keysReq=store.getAllKeys(), valsReq=store.getAll();
-      let keys=null, vals=null;
-      keysReq.onsuccess=()=>{keys=keysReq.result; if(vals!==null) build();};
-      valsReq.onsuccess=()=>{vals=valsReq.result; if(keys!==null) build();};
-      function build(){keys.forEach((k,i)=>{_dbCache[k]=vals[i];}); cb();}
-      tx.onerror=()=>cb();
+    req.onupgradeneeded=e=>{
+      try{e.target.result.createObjectStore('items');}catch(e2){}
     };
-    req.onerror=()=>cb();
-  }catch(e){cb();}
+    req.onsuccess=e=>{
+      try{
+        _idb=e.target.result;
+        if(navigator.storage&&navigator.storage.persist) navigator.storage.persist();
+        const tx=_idb.transaction('items','readonly');
+        const store=tx.objectStore('items');
+        const keysReq=store.getAllKeys(), valsReq=store.getAll();
+        let keys=null, vals=null;
+        keysReq.onsuccess=()=>{keys=keysReq.result; if(vals!==null) build();};
+        valsReq.onsuccess=()=>{vals=valsReq.result; if(keys!==null) build();};
+        keysReq.onerror=()=>done();
+        valsReq.onerror=()=>done();
+        function build(){try{keys.forEach((k,i)=>{_dbCache[k]=vals[i];});}catch(e3){}done();}
+        tx.onerror=()=>done();
+        tx.onabort=()=>done();
+      }catch(e2){done();}
+    };
+    req.onerror=()=>done();
+    req.onblocked=()=>done();
+  }catch(e){done();}
 }
 
 function dbGet(k){return Object.prototype.hasOwnProperty.call(_dbCache,k)?_dbCache[k]:null;}
@@ -3074,11 +3086,17 @@ function resetAll(){
   render();
 }
 // Startup: open IndexedDB, load cache, migrate any legacy localStorage data, then render
-idbInit(()=>{
+let _appStarted=false;
+function startApp(){
+  if(_appStarted) return;
+  _appStarted=true;
   migrateLegacyData();
   state.showHome = getSavesIndex().length > 0;
   render();
-});
+}
+idbInit(startApp);
+// Hard fallback: if idbInit never fires (e.g. private browsing blocks IDB), render anyway
+document.addEventListener('DOMContentLoaded',()=>setTimeout(startApp,500));
 const _logoEl=document.getElementById('lw-header-logo');
 if(_logoEl) _logoEl.src = LOGO_SYMBOL;
 </script>

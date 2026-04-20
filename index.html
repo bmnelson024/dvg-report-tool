@@ -117,6 +117,12 @@
   <div id="step-content"></div>
 </div>
 <script>
+// Global error handler - shows errors visibly on page for remote debugging
+window.onerror=function(msg,src,line,col,err){
+  const d=document.getElementById('step-content');
+  if(d) d.innerHTML='<div style="color:red;padding:20px;font-family:monospace;background:#fff0f0;border:2px solid red;border-radius:8px;margin:20px 0"><strong>JavaScript Error:</strong><br>'+msg+'<br><small>'+src+':'+line+'</small></div>';
+  return false;
+};
 // ─── BRANDING — customize for each company deployment ────────────────────────
 const BRAND_NAME = "Company Name";           // Appears in title and UI
 const BRAND_PRIMARY = "#1a1400";             // Dark color (nav, buttons, headers)
@@ -3095,8 +3101,9 @@ function startApp(){
   render();
 }
 idbInit(startApp);
-// Hard fallback: if idbInit never fires (e.g. private browsing blocks IDB), render anyway
-document.addEventListener('DOMContentLoaded',()=>setTimeout(startApp,500));
+// Hard fallback: script is at end of body so DOM is already ready.
+// If idbInit hasn't fired within 1.5s, force render anyway.
+setTimeout(startApp, 1500);
 const _logoEl=document.getElementById('lw-header-logo');
 if(_logoEl) _logoEl.src = LOGO_SYMBOL;
 </script>

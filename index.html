@@ -910,7 +910,7 @@ body{font-family:Georgia,serif;background:var(--cream);color:var(--text);}
 .ag{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .al{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;}
 .av{font-size:14px;font-weight:600;color:var(--dark);margin-top:2px;}
-.cg{display:grid;grid-template-columns:1fr 1fr;gap:28px 24px;margin-bottom:32px;}
+.cg{display:grid;grid-template-columns:1fr;gap:20px;margin-bottom:32px;}
 .cb{margin-bottom:4px;}
 .ct{font-family:sans-serif;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:6px;}
 .cb img{width:100%;height:auto;display:block;}
@@ -1016,9 +1016,18 @@ ${(()=>{
 <div class="page">
   <div class="pn">${prop}</div><div class="sh">Financial Charts</div>
   <div class="cg">
-    ${["chart_operating_income:Operating Income vs. Pro Forma","chart_operating_expense:Operating Expense vs. Pro Forma","chart_noi:NOI vs. Pro Forma","chart_income_vs_expense:Operating Income vs. Expense"].map(s=>{const[k,t]=s.split(":");const src=chartSrc(k);return src?`<div class="cb"><img src="${src}"/></div>`:`<div class="cb"><div class="np">${t} — not uploaded</div></div>`;}).join("")}
+    ${["chart_operating_income:Operating Income vs. Pro Forma","chart_operating_expense:Operating Expense vs. Pro Forma"].map(s=>{const[k,t]=s.split(":");const src=chartSrc(k);return src?`<div class="cb"><img src="${src}"/></div>`:`<div class="cb"><div class="np">${t} — not uploaded</div></div>`;}).join("")}
   </div>
-    <div class="footer-prop">${prop}</div>
+  <div class="footer-prop">${prop}</div>
+  <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
+  <div class="pgn">${pg.v()}</div>
+</div>
+<div class="page">
+  <div class="pn">${prop}</div><div class="sh">Financial Charts (continued)</div>
+  <div class="cg">
+    ${["chart_noi:NOI vs. Pro Forma","chart_income_vs_expense:Operating Income vs. Expense"].map(s=>{const[k,t]=s.split(":");const src=chartSrc(k);return src?`<div class="cb"><img src="${src}"/></div>`:`<div class="cb"><div class="np">${t} — not uploaded</div></div>`;}).join("")}
+  </div>
+  <div class="footer-prop">${prop}</div>
   <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
 </div>
@@ -1035,7 +1044,16 @@ ${(()=>{
     <div class="lc"><div class="ll">Capex Total</div><div class="lv">${fmtWhole(m.capex)}</div></div>
   </div>
   <div class="cg">
-    ${["chart_lease_expirations:Lease Expirations","chart_rent_growth:Rent Growth & Market Rent","chart_occupancy_rate:Occupancy Rate","chart_loss_to_lease:Loss to Lease"].map(s=>{const[k,t]=s.split(":");const src=chartSrc(k);return src?`<div class="cb"><img src="${src}"/></div>`:`<div class="cb"><div class="np">${t} — not uploaded</div></div>`;}).join("")}
+    ${["chart_lease_expirations:Lease Expirations","chart_rent_growth:Rent Growth & Market Rent"].map(s=>{const[k,t]=s.split(":");const src=chartSrc(k);return src?`<div class="cb"><img src="${src}"/></div>`:`<div class="cb"><div class="np">${t} — not uploaded</div></div>`;}).join("")}
+  </div>
+  <div class="footer-prop">${prop}</div>
+  <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
+  <div class="pgn">${pg.v()}</div>
+</div>
+<div class="page">
+  <div class="pn">${prop}</div><div class="sh">Leasing Charts (continued)</div>
+  <div class="cg">
+    ${["chart_occupancy_rate:Occupancy Rate","chart_loss_to_lease:Loss to Lease"].map(s=>{const[k,t]=s.split(":");const src=chartSrc(k);return src?`<div class="cb"><img src="${src}"/></div>`:`<div class="cb"><div class="np">${t} — not uploaded</div></div>`;}).join("")}
   </div>
   <div class="footer-prop">${prop}</div>
   <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
@@ -1050,7 +1068,7 @@ ${(()=>{
   for(let i=CAPEX_PER_PAGE; i<allItems.length; i+=CAPEX_PER_PAGE) extraChunks.push(allItems.slice(i,i+CAPEX_PER_PAGE));
   const capexRow = i => `<tr><td>${i.name}</td><td>${fmtWhole(i.amount)}</td></tr>`;
   const chartsHtml = `<div class="sh" style="margin-top:8px">Capex &amp; Maintenance Charts</div>
-  <div class="cg" style="grid-template-columns:1fr 1fr;gap:20px;">
+  <div class="cg">
     ${["chart_capital_expense:Capital Expense","chart_maintenance_expense:Maintenance Expense"].map(s=>{const[k,t]=s.split(":");const src=chartSrc(k);return src?`<div class="cb"><img src="${src}"/></div>`:`<div class="cb"><div class="np">${t} — not uploaded</div></div>`;}).join("")}
   </div>`;
   let out = `<div class="page">

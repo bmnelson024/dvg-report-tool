@@ -528,7 +528,7 @@ function renderHome(){
         <h2 style="font-size:18px;font-weight:700;margin-bottom:4px">Saved Reports</h2>
         <p style="font-size:13px;color:#7a6420">Resume a saved report or start a new one.</p>
       </div>
-      <button class="home-resume-btn" onclick="state.showHome=false;state.source=null;state.step=0;render()" style="white-space:nowrap">+ New Report</button>
+      <button class="home-resume-btn" onclick="resetAll()" style="white-space:nowrap">+ New Report</button>
     </div>
     ${saves.length===0?`<div style="text-align:center;padding:40px 0;color:#9ca3af;font-size:14px">No saved reports yet.</div>`
     :saves.map(s=>`
@@ -2872,9 +2872,13 @@ function render(){
     if(!state.source){
       el.innerHTML=`
         <div style="margin-bottom:24px">
-          <h2 style="font-size:18px;font-weight:700;margin-bottom:4px">Select Report Type</h2>
-          <p style="font-size:13px;color:#7a6420">Choose whether this is a single AppFolio property or a multi-property investment report.</p>
-        </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+            <div>
+              <h2 style="font-size:18px;font-weight:700;margin-bottom:4px">Select Report Type</h2>
+              <p style="font-size:13px;color:#7a6420">Choose whether this is a single AppFolio property or a multi-property investment report.</p>
+            </div>
+            ${getSavesIndex().length>0?`<button class="btn-home" onclick="state.showHome=true;render()" style="white-space:nowrap;flex-shrink:0">← All Reports</button>`:""}
+          </div>
         <div style="display:grid;grid-template-columns:1fr;gap:16px;grid-auto-rows:auto;max-width:480px">
           <div class="home-card" style="flex-direction:column;align-items:flex-start;gap:10px;cursor:pointer;padding:20px 20px 16px" onclick="state.source='appfolio';state.metrics=null;state.prevMetrics=null;state.narratives={income:\'\',expenses:\'\',capex:\'\',outlook:\'\'};state.reportHTML=null;state.invMetrics=null;state.invReportHTML=null;state.invProperties=[];state.invSections={loanPrincipal:true,writeoffs:true,financialCharts:true,leasingSection:true};render()">
             <div class="home-prop" style="font-size:15px">Single Property Report</div>
@@ -3117,7 +3121,7 @@ function calcEconAvg(){
   return "";
 }
 function resetAll(){
-  state={...state,showHome:getSavesIndex().length>0,source:null,step:0,propertyName:"",currentQuarter:"",prevQuarterLabel:"",assetFacts:null,files:{income:null,rr1:null,rr2:null,rr3:null,leasing:null,leasingSummary:null,renewalSummary:null,bank:null,trialBalance:null,delinquency:null,rentEngine:null,capexDetail:null},charts:{chart_operating_income:null,chart_operating_expense:null,chart_income_vs_expense:null,chart_noi:null,chart_lease_expirations:null,chart_rent_growth:null,chart_occupancy_rate:null,chart_capital_expense:null,chart_maintenance_expense:null,chart_loss_to_lease:null},econOcc:{m1:"",m2:"",m3:""},prevMetrics:null,propertyPhoto:null,metrics:null,narratives:{income:"",expenses:"",capex:"",outlook:""},reportHTML:null,generating:false,
+  state={...state,showHome:false,source:null,step:0,propertyName:"",currentQuarter:"",prevQuarterLabel:"",assetFacts:null,files:{income:null,rr1:null,rr2:null,rr3:null,leasing:null,leasingSummary:null,renewalSummary:null,bank:null,trialBalance:null,delinquency:null,rentEngine:null,capexDetail:null},charts:{chart_operating_income:null,chart_operating_expense:null,chart_income_vs_expense:null,chart_noi:null,chart_lease_expirations:null,chart_rent_growth:null,chart_occupancy_rate:null,chart_capital_expense:null,chart_maintenance_expense:null,chart_loss_to_lease:null},econOcc:{m1:"",m2:"",m3:""},prevMetrics:null,propertyPhoto:null,metrics:null,narratives:{income:"",expenses:"",capex:"",outlook:""},reportHTML:null,generating:false,
   investmentName:"",invProperties:[],invCharts:{inv_operating_income:null,inv_operating_expense:null,inv_income_by_property:null,inv_expense_by_property:null,inv_income_vs_expense:null,inv_noi:null,inv_noi_by_property:null,inv_utility:null,inv_lease_expirations:null,inv_rent_growth:null,inv_occupancy_rate:null,inv_occupancy_by_property:null},invNarratives:{income:"",expenses:"",outlook:""},invMetrics:null,invReportHTML:null,invLoan:{principalInception:"",principalInceptionDate:"",principalCurrent:"",principalCurrentDate:"",writeoffs:""},invPrevMetrics:null,prevOccupancyInput:""};
   render();
 }

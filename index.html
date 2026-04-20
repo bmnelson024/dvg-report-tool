@@ -984,14 +984,14 @@ ${(()=>{
   <div class="ns"><div class="nl">Capital Expenditures</div><p class="nt">${n.capex}</p></div>
   ${!summaryOverflow?`<div class="ns"><div class="nl">Outlook</div><p class="nt">${n.outlook}</p></div>`:""}
   <div class="footer-prop">${prop}</div>
-  <img src="${LOGO_SYMBOL}" alt="LeavenWealth" class="footer-logo"/>
+  <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
 </div>`;
   const page2b=summaryOverflow?`<div class="page">
   <div class="pn">${prop}</div><div class="sh">Summary <span style="font-size:11px;font-weight:400;letter-spacing:1px;opacity:0.7">(continued)</span></div>
   <div class="ns"><div class="nl">Outlook</div><p class="nt">${n.outlook}</p></div>
   <div class="footer-prop">${prop}</div>
-  <img src="${LOGO_SYMBOL}" alt="LeavenWealth" class="footer-logo"/>
+  <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
 </div>`:"";
   return page2+page2b;
@@ -1009,7 +1009,7 @@ ${(()=>{
   </div>
   ${(m.occ1||m.occ2||m.occ3)?(()=>{const _MO=["January","February","March","April","May","June","July","August","September","October","November","December"];const _qm=qtr.match(/Q([1-4])\s*(\d{4})/i);const _s=_qm?(parseInt(_qm[1])-1)*3:0;const [mn1,mn2,mn3]=[_MO[_s],_MO[_s+1],_MO[_s+2]];return`<div class="occ-months"><div class="occ-month"><div class="occ-month-label">${mn1} Occupancy</div><div class="occ-month-val">${m.occ1??'—'}%</div></div><div class="occ-month"><div class="occ-month-label">${mn2} Occupancy</div><div class="occ-month-val">${m.occ2??'—'}%</div></div><div class="occ-month"><div class="occ-month-label">${mn3} Occupancy</div><div class="occ-month-val">${m.occ3??'—'}%</div></div></div>`;})():""}
   <div class="footer-prop">${prop}</div>
-  <img src="${LOGO_SYMBOL}" alt="LeavenWealth" class="footer-logo"/>
+  <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
 </div>
 <div class="page">
@@ -1018,7 +1018,7 @@ ${(()=>{
     ${["chart_operating_income:Operating Income vs. Pro Forma","chart_operating_expense:Operating Expense vs. Pro Forma","chart_noi:NOI vs. Pro Forma","chart_income_vs_expense:Operating Income vs. Expense"].map(s=>{const[k,t]=s.split(":");const src=chartSrc(k);return src?`<div class="cb"><img src="${src}"/></div>`:`<div class="cb"><div class="np">${t} — not uploaded</div></div>`;}).join("")}
   </div>
     <div class="footer-prop">${prop}</div>
-  <img src="${LOGO_SYMBOL}" alt="LeavenWealth" class="footer-logo"/>
+  <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
 </div>
 <div class="page">
@@ -1037,7 +1037,7 @@ ${(()=>{
     ${["chart_lease_expirations:Lease Expirations","chart_rent_growth:Rent Growth & Market Rent","chart_occupancy_rate:Occupancy Rate","chart_loss_to_lease:Loss to Lease"].map(s=>{const[k,t]=s.split(":");const src=chartSrc(k);return src?`<div class="cb"><img src="${src}"/></div>`:`<div class="cb"><div class="np">${t} — not uploaded</div></div>`;}).join("")}
   </div>
   <div class="footer-prop">${prop}</div>
-  <img src="${LOGO_SYMBOL}" alt="LeavenWealth" class="footer-logo"/>
+  <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
 </div>
 ${(()=>{
@@ -1060,7 +1060,7 @@ ${(()=>{
   </tbody></table>
   ${extraChunks.length?"":chartsHtml}
   <div class="footer-prop">${prop}</div>
-  <img src="${LOGO_SYMBOL}" alt="LeavenWealth" class="footer-logo"/>
+  <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
 </div>`;
   extraChunks.forEach((chunk, ci) => {
@@ -1073,7 +1073,7 @@ ${(()=>{
   </tbody></table>
   ${isLast?chartsHtml:""}
   <div class="footer-prop">${prop}</div>
-  <img src="${LOGO_SYMBOL}" alt="LeavenWealth" class="footer-logo"/>
+  <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
 </div>`;
   });
@@ -1104,7 +1104,7 @@ ${(()=>{
   <div class="pn">${prop}</div><div class="sh">Income Statement — ${qtr}</div>
   <p style="font-family:sans-serif;font-size:13px;color:#7a6420;">No income statement data available.</p>
     <div class="footer-prop">${prop}</div>
-  <img src="${LOGO_SYMBOL}" alt="LeavenWealth" class="footer-logo"/>
+  <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
 </div>`;
   const splitIdx=filteredIncomeRows.findIndex(r=>{const l=r.label.toLowerCase().trim();return l==="total income"||l==="total operating income";});
@@ -1122,7 +1122,7 @@ ${(()=>{
   <div class="pn">${prop}</div><div class="sh">Income Statement — ${qtr}</div>
   <table class="ist">${hdr()}<tbody>${part1.map(makeRow).join("")}</tbody></table>
   <div class="footer-prop">${prop}</div>
-  <img src="${LOGO_SYMBOL}" alt="LeavenWealth" class="footer-logo"/>
+  <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
 </div>
 ${p2chunks.map((chunk)=>`
@@ -1130,7 +1130,7 @@ ${p2chunks.map((chunk)=>`
   <div class="pn">${prop}</div><div class="sh">Income Statement (continued) — ${qtr}</div>
   <table class="ist">${hdr()}<tbody>${chunk.map(makeRow).join("")}</tbody></table>
   <div class="footer-prop">${prop}</div>
-  <img src="${LOGO_SYMBOL}" alt="LeavenWealth" class="footer-logo"/>
+  <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
 </div>`).join("")}`;
 })()}
@@ -1159,10 +1159,20 @@ ${(()=>{
   if(!m.rentRollRows || !m.rentRollRows.length){
     return '<div class="page-data"><div class="pn">'+prop+'</div><div class="sh">Rent Roll \u2014 '+qtr+'</div>'
       +'<p style="font-family:sans-serif;font-size:13px;color:#7a6420;">No rent roll data available.</p>'
-      +'<div class="footer-prop">'+prop+'</div><img src="'+LOGO_SYMBOL+'" alt="LeavenWealth" class="footer-logo"/>'
+      +'<div class="footer-prop">'+prop+'</div><img src="'+LOGO_SYMBOL+'" alt="Dreamvesting" class="footer-logo"/>'
       +'<div class="pgn">'+pg.v()+'</div></div>';
   }
   var rows = m.rentRollRows;
+  var buildingOrder = m.rentRollBuildings||[];
+  // Re-sort rows by building order (in case __building survived but order needs enforcing)
+  if(buildingOrder.length > 1){
+    rows = rows.slice().sort(function(a,b){
+      var bi = buildingOrder.indexOf(a.__building||"");
+      var bj = buildingOrder.indexOf(b.__building||"");
+      if(bi !== bj) return bi - bj;
+      return (a.__vacant===b.__vacant)?0:(a.__vacant?1:-1);
+    });
+  }
   // Build tbody with building address headers inserted between groups
   var out = "";
   var allTbodyRows = [];
@@ -1195,7 +1205,7 @@ ${(()=>{
         + '<div class="sh">Rent Roll'+cont+' \u2014 '+qtr+'</div>'
         + '<table class="rrt">'+thead+'<tbody>'+tbody+'</tbody></table>'
         + '<div class="footer-prop">'+prop+'</div>'
-        + '<img src="'+LOGO_SYMBOL+'" alt="LeavenWealth" class="footer-logo"/>'
+        + '<img src="'+LOGO_SYMBOL+'" alt="Dreamvesting" class="footer-logo"/>'
         + '<div class="pgn">'+pg.v()+'</div>'
         + '</div>';
       pageRows = [];
@@ -1206,8 +1216,8 @@ ${(()=>{
 })()}
 <div class="page">
   <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:32px;">
-    <img src="${LOGO_FULL}" alt="LeavenWealth" style="height:48px;width:auto;margin-bottom:10px;opacity:0.85;"/>
-    <div style="font-family:sans-serif;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;">Prepared by LeavenWealth</div>
+    <img src="${LOGO_FULL}" alt="Dreamvesting" style="height:48px;width:auto;margin-bottom:10px;opacity:0.85;"/>
+    <div style="font-family:sans-serif;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;">Prepared by Dreamvesting</div>
   </div>
   <div class="sh">Disclosures &amp; Definitions</div>
   <div class="fn">
@@ -1219,7 +1229,7 @@ ${(()=>{
     </ol>
   </div>
   <div class="footer-prop">${prop}</div>
-  <img src="${LOGO_SYMBOL}" alt="LeavenWealth" class="footer-logo"/>
+  <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
 </div>
 </body></html>`;
@@ -1328,6 +1338,7 @@ function parsePropertyMetrics(prop){
   return {name:prop.name,source:prop.source,occupancy,occ1,occ2,occ3,unitCount,totalIncome,totalExpense,noi,capex,capexItems,cashOnHand,lossToLease:calcLossToLease(mkt,act),monthlyRent:act,delinquency,newLeases,renewals,inquiries,applications,avgEconOcc,expenseCategories:propExpenseCats,remodels};
 }
 function processInvestmentData(){
+  if(typeof XLSX==='undefined'){ensureXLSX(()=>processInvestmentData());return;}
   try{
     showError("");
     const results=[];
@@ -1850,8 +1861,15 @@ function processDataAppFolio() {
 
     // ── Income Statement (Excel) — use parseQuarterFromExcel for AppFolio 12-month statements
     // so we sum only the 3 current-quarter months rather than the full-year "Total" column.
-    const parsed = parseQuarterFromExcel(state.files.income, state.currentQuarter||"");
-    if(!parsed) { showError("Could not parse Income Statement. Make sure you uploaded a 12-month AppFolio statement and the quarter is set correctly."); return; }
+    // Ensure XLSX library is loaded (may not be if resuming without re-uploading the Excel file)
+    if(typeof XLSX==='undefined'){
+      ensureXLSX(()=>processDataAppFolio());
+      return;
+    }
+    let parsed;
+    try { parsed = parseQuarterFromExcel(state.files.income, state.currentQuarter||""); }
+    catch(e){ showError("Income Statement parse error: "+e.message+". Try re-uploading the Income Statement file."); return; }
+    if(!parsed) { showError("Could not parse Income Statement — quarter \""+state.currentQuarter+"\" not found. Make sure you uploaded a 12-month AppFolio Excel statement and the quarter is set correctly."); return; }
     const { totalIncome, totalExpense, noi, capex, capexItems, incomeRows, monthCols } = parsed;
     if (!totalIncome && !totalExpense) { showError("Could not parse Income Statement. Please check the Excel file."); return; }
 
@@ -1879,19 +1897,19 @@ function processDataAppFolio() {
     const occupancy = Math.round((occ1 + occ2 + occ3) / 3);
 
     // ── Rent Roll — Loss to Lease & Rent Roll display ────────────────────────
-    // Parse all rows, tracking which building each unit belongs to
     const _allRRRows = parseDelim(state.files.rr3);
-    let _currentBuilding = "";
+    // Track building per row by scanning in order
     const _buildingOrder = [];
+    let _curBuilding = "";
     _allRRRows.forEach(r => {
       const u = (r["Unit"]||"").trim();
-      if(/^->/.test(u) || u.length >= 50) {
-        // Extract address from e.g. "-> Dreamvesting Rentals (3302 Burt St) - 3302 Burt St Omaha, NE"
-        const addrMatch = u.replace(/^->\s*/,"").match(/\(([^)]+)\)\s*-\s*(.+)/);
-        _currentBuilding = addrMatch ? addrMatch[2].trim() : u.replace(/^->\s*/,"").replace(/\([^)]*\)/g,"").trim();
-        if(!_buildingOrder.includes(_currentBuilding)) _buildingOrder.push(_currentBuilding);
+      if(u.startsWith("->") || u.length >= 50) {
+        const cleaned = u.replace(/^->\s*/,"");
+        const m2 = cleaned.match(/\(([^)]+)\)\s*-\s*(.+)/);
+        _curBuilding = m2 ? m2[2].trim() : cleaned.replace(/\([^)]*\)/g,"").trim();
+        if(!_buildingOrder.includes(_curBuilding)) _buildingOrder.push(_curBuilding);
       }
-      r.__building = _currentBuilding;
+      r.__building = _curBuilding;
     });
     const finalRows = _allRRRows.filter(r => {
       const u = (r["Unit"]||"").trim();
@@ -1926,7 +1944,12 @@ function processDataAppFolio() {
     const statusHeader = rrAllHeaders.find(h=>/^status$/i.test(h.trim()))||null;
     const rentRollRows = finalRows
       .map(r=>{const o={};rrColMap.forEach(c=>o[c.label]=r[c.src]??"");const _st=(statusHeader?r[statusHeader]||"":"").toUpperCase();o.__vacant=!!(_st.includes("VACANT")||_st==="NOTICE-UNRENTED");o.__building=r.__building||"";return o;})
-      .sort((a,b)=>{if(a.__building!==b.__building)return _buildingOrder.indexOf(a.__building)-_buildingOrder.indexOf(b.__building);return a.__vacant===b.__vacant?0:a.__vacant?1:-1;});
+      .sort((a,b)=>{
+        const bi=_buildingOrder.indexOf(a.__building);
+        const bj=_buildingOrder.indexOf(b.__building);
+        if(bi!==bj) return bi-bj;
+        return a.__vacant===b.__vacant?0:a.__vacant?1:-1;
+      });
 
     // ── Delinquency ──────────────────────────────────────────────────────────
     // From "Delinquency As Of" report — Total row, Amount Receivable column
@@ -2021,7 +2044,7 @@ function processDataAppFolio() {
     const {m1,m2,m3} = state.econOcc;
     const avgEconOcc = (m1&&m2&&m3) ? Math.round((parseFloat(m1)+parseFloat(m2)+parseFloat(m3))/3).toString() : null;
 
-    state.metrics = {occupancy,occ1,occ2,occ3,unitCount:finalRows.length,totalIncome,totalExpense,noi,capex,cashOnHand,lossToLease:calcLossToLease(mkt,act),monthlyRent:act,delinquency,newLeases,renewals,inquiries,applications,capexItems,avgEconOcc,rentRollRows,rentRollHeaders:rrHeaders,incomeRows,monthCols,expenseCategories:extractExpenseCats(incomeRows)};
+    state.metrics = {occupancy,occ1,occ2,occ3,unitCount:finalRows.length,totalIncome,totalExpense,noi,capex,cashOnHand,lossToLease:calcLossToLease(mkt,act),monthlyRent:act,delinquency,newLeases,renewals,inquiries,applications,capexItems,avgEconOcc,rentRollRows,rentRollHeaders:rrHeaders,rentRollBuildings:_buildingOrder,incomeRows,monthCols,expenseCategories:extractExpenseCats(incomeRows)};
     state.narratives = genNarratives(state.metrics);
     state.step=1; state._savedThisStep=false; render();
   } catch(e){ showError("Error: "+e.message); }

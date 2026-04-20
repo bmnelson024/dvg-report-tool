@@ -374,7 +374,8 @@ function saveProgress(){
   // Charts, photo, rentRollRows, incomeRows excluded from save:
   // - charts/photo stored separately by property name or re-uploaded each quarter
   // - rentRollRows and incomeRows are large arrays regenerated from fresh uploads each quarter
-  const {rentRollRows:_rr, rentRollHeaders:_rrh, incomeRows:_ir, monthCols:_mc, ...savableMetrics} = state.metrics||{};
+  // Include all metrics in save — rentRollRows/incomeRows are plain objects, not large binaries
+  const savableMetrics = state.metrics||{};
   // Investment properties: strip large file buffers (re-uploaded each session) but keep names/sources/econOcc/metrics
   const savableInvProperties=(state.invProperties||[]).map(p=>({
     id:p.id, name:p.name, source:p.source, econOcc:p.econOcc,

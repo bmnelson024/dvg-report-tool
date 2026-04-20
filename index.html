@@ -1881,6 +1881,13 @@ function processDataAppFolio() {
       return u && !/^\d+\s*units?$/i.test(u) && !/^total/i.test(u) && !/^->/.test(u) && u.length < 50;
     });
     let mkt=0, act=0;
+    // Debug: log first few rows to console so we can see what's being parsed
+    if(finalRows.length===0){
+      showError("Warning: Rent roll parsed 0 unit rows. File may not have converted correctly from Excel. Try exporting as CSV from AppFolio instead.");
+    } else {
+      console.log("Rent roll parsed "+finalRows.length+" rows. First row keys:", Object.keys(finalRows[0]||{}));
+      console.log("First row:", finalRows[0]);
+    }
     finalRows.forEach(r => {
       const status = (r["Status"]||"").toUpperCase();
       if (!status.includes("VACANT") && status !== "NOTICE-UNRENTED") {

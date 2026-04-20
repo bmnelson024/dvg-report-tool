@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Quarterly Report Builder</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: Inter, sans-serif; background: #ffffff; color: #1a1400; min-height: 100vh; }
@@ -123,6 +122,19 @@ window.onerror=function(msg,src,line,col,err){
   if(d) d.innerHTML='<div style="color:red;padding:20px;font-family:monospace;background:#fff0f0;border:2px solid red;border-radius:8px;margin:20px 0"><strong>JavaScript Error:</strong><br>'+msg+'<br><small>'+src+':'+line+'</small></div>';
   return false;
 };
+// ─── XLSX LOADER — load on demand so it never blocks page render ─────────────
+let _xlsxLoaded=false, _xlsxLoading=false, _xlsxQueue=[];
+function ensureXLSX(cb){
+  if(_xlsxLoaded){cb();return;}
+  _xlsxQueue.push(cb);
+  if(_xlsxLoading) return;
+  _xlsxLoading=true;
+  const s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  s.onload=()=>{_xlsxLoaded=true;_xlsxLoading=false;_xlsxQueue.forEach(f=>f());_xlsxQueue=[];};
+  s.onerror=()=>{_xlsxLoading=false;_xlsxQueue.forEach(f=>f());_xlsxQueue=[];};
+  document.head.appendChild(s);
+}
 // ─── BRANDING — customize for each company deployment ────────────────────────
 const BRAND_NAME = "Company Name";           // Appears in title and UI
 const BRAND_PRIMARY = "#1a1400";             // Dark color (nav, buttons, headers)
@@ -533,6 +545,7 @@ const parseCur = val => {
 // header row) and emits CSV from there onward — so parseDelim / skipMetaRows see a clean file.
 const xlsxToText = buffer => {
   try {
+    if(typeof XLSX==='undefined'){console.warn('XLSX not loaded');return '';}
     const wb = XLSX.read(buffer, {type:"array", cellDates:true});
     const ws = wb.Sheets[wb.SheetNames[0]];
     // raw:false → dates and numbers returned as formatted strings; easier for parseDelim
@@ -2002,7 +2015,7 @@ function loadFile(key, asBuffer, cb){
     if(asBuffer==='text' && isXL){
       // Excel uploaded for a text-type field — convert to CSV text via XLSX.js
       const r=new FileReader();
-      r.onload=ev=>{ cb(xlsxToText(ev.target.result)); render(); };
+      r.onload=ev=>{ const buf=ev.target.result; ensureXLSX(()=>{ cb(xlsxToText(buf)); render(); }); };
       r.readAsArrayBuffer(f);
     } else {
       const useBuffer=asBuffer==='auto'?isXL:asBuffer;

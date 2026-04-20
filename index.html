@@ -640,6 +640,7 @@ const getUnitId = r => {
 const getVacantFlag = r => {
   const status = (r["Status"] || r["Residents"] || r["Resident Status"] || r["Tenant Status"] || "").toUpperCase();
   if (status.includes("VACANT") || status.includes("VACANCY")) return true;
+  if (status === "NOTICE-UNRENTED") return true;
   // Buildium: a row with no resident name and a non-"occupied" status is vacant
   const name = (r["Resident Name"] || r["Resident"] || r["Residents"] || "").trim();
   const st   = (r["Status"] || "").trim();
@@ -1314,14 +1315,14 @@ function parsePropertyMetrics(prop){
   const calcOccAF=csv=>{
     const rows=parseDelim(csv);
     const sr=rows.find(r=>/\d+\s*units?/i.test(r["Unit"]||""));
-    if(sr){const p=parseFloat((sr["Status"]||"").replace("%",""));if(!isNaN(p))return Math.round(p);}
+    if(sr){const _om=(sr["Status"]||"").match(/([\d.]+)%/);const p=_om?parseFloat(_om[1]):NaN;if(!isNaN(p))return Math.round(p);}
     const tr=rows.filter(r=>r["Unit"]&&!/units?$/i.test(r["Unit"]||"")&&r["Status"]);
-    const vc=tr.filter(r=>/vacant/i.test(r["Status"]||"")).length;
+    const vc=tr.filter(r=>/vacant/i.test(r["Status"]||"")||/notice-unrented/i.test(r["Status"]||"")).length;
     return tr.length>0?Math.round(((tr.length-vc)/tr.length)*100):0;
   };
   occ1=calcOccAF(prop.files.rr1); occ2=calcOccAF(prop.files.rr2); occ3=calcOccAF(prop.files.rr3);
   const fr=parseDelim(prop.files.rr3||"").filter(r=>{const u=(r["Unit"]||"").trim();return u&&!/^\d+\s*units?$/i.test(u)&&!/^total/i.test(u);});
-  fr.forEach(r=>{if(!getVacantFlag(r)){mkt+=parseCur(r["Market Rent"]||r["MarketRent"]||r["Mkt Rent"]||0);act+=parseCur(r["Rent"]||0);}});
+  fr.forEach(r=>{const st=(r["Status"]||"").toUpperCase();if(!getVacantFlag(r)&&st!=="NOTICE-UNRENTED"){mkt+=parseCur(r["Market Rent"]||r["MarketRent"]||r["Mkt Rent"]||0);act+=parseCur(r["Rent"]||0);}});
   const dr=parseDelim(prop.files.delinquency||"");
   const dt=dr.find(r=>/^total$/i.test((r["Unit"]||r["Name"]||"").trim()));
   if(dt){delinquency=parseCur(dt["Amount Receivable"]||0);}else{dr.forEach(r=>{const a=parseCur(r["Amount Receivable"]||0);if(a>0)delinquency+=a;});}
@@ -1859,12 +1860,13 @@ function processDataAppFolio() {
       const summaryRow = rows.find(r => /\d+\s*units?/i.test(r["Unit"]||""));
       if (summaryRow) {
         // Parse "98.6% Occupied" from Status column
-        const pct = parseFloat((summaryRow["Status"]||"").replace("%",""));
+        const _om2=(summaryRow["Status"]||"").match(/([\d.]+)%/);
+        const pct=_om2?parseFloat(_om2[1]):NaN;
         if (!isNaN(pct)) return Math.round(pct);
       }
       // Fallback: count vacant rows
       const totalRows = rows.filter(r => r["Unit"] && !/units?$/i.test(r["Unit"]||"") && r["Status"]);
-      const vacantCount = totalRows.filter(r => /vacant/i.test(r["Status"]||"")).length;
+      const vacantCount = totalRows.filter(r => /vacant/i.test(r["Status"]||"") || /notice-unrented/i.test(r["Status"]||"")).length;
       const totalCount = totalRows.length;
       return totalCount > 0 ? Math.round(((totalCount - vacantCount) / totalCount) * 100) : 0;
     };
@@ -1881,7 +1883,7 @@ function processDataAppFolio() {
     let mkt=0, act=0;
     finalRows.forEach(r => {
       const status = (r["Status"]||"").toUpperCase();
-      if (!status.includes("VACANT")) {
+      if (!status.includes("VACANT") && status !== "NOTICE-UNRENTED") {
         mkt += parseCur(r["Market Rent"]||r["MarketRent"]||r["Mkt Rent"]||0);  // FIX: handle camelCase export variant
         act += parseCur(r["Rent"]||0);
       }
@@ -1902,7 +1904,7 @@ function processDataAppFolio() {
     const rrHeaders = rrColMap.map(c=>c.label);
     const statusHeader = rrAllHeaders.find(h=>/^status$/i.test(h.trim()))||null;
     const rentRollRows = finalRows
-      .map(r=>{const o={};rrColMap.forEach(c=>o[c.label]=r[c.src]??"");o.__vacant=!!(statusHeader&&(r[statusHeader]||"").toUpperCase().includes("VACANT"));return o;})
+      .map(r=>{const o={};rrColMap.forEach(c=>o[c.label]=r[c.src]??"");const _st=(statusHeader?r[statusHeader]||"":"").toUpperCase();o.__vacant=!!(_st.includes("VACANT")||_st==="NOTICE-UNRENTED");return o;})
       .sort((a,b)=>a.__vacant===b.__vacant?0:a.__vacant?1:-1);
 
     // ── Delinquency ──────────────────────────────────────────────────────────
@@ -2063,7 +2065,7 @@ const CHART_MAP = [
   { key:"chart_operating_expense", match:"operating expense" },
   { key:"chart_lease_expirations", match:"lease expirations" },
   { key:"chart_rent_growth",       match:"rent growth" },
-  { key:"chart_occupancy_rate",    match:"occupancy rate per unit" },
+  { key:"chart_occupancy_rate",    match:"occupancy rate" },
   { key:"chart_capital_expense",   match:"capital expense" },
   { key:"chart_maintenance_expense",match:"maintenance expense" },
   { key:"chart_loss_to_lease",     match:"loss to lease" },

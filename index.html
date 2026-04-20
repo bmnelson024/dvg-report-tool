@@ -575,8 +575,8 @@ const xlsxToText = buffer => {
     if(typeof XLSX==='undefined'){console.warn('XLSX not loaded');return '';}
     const wb = XLSX.read(buffer, {type:"array", cellDates:true});
     const ws = wb.Sheets[wb.SheetNames[0]];
-    // raw:false → dates and numbers returned as formatted strings; easier for parseDelim
-    const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:"", raw:false});
+    // raw:true → numbers come out as plain numbers, not formatted strings like "$850.00"
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:"", raw:true});
     // Find the first row that looks like a real header (>= 3 non-empty cells)
     let startIdx = 0;
     for(let i = 0; i < Math.min(20, rows.length); i++){
@@ -2046,7 +2046,18 @@ function loadFile(key, asBuffer, cb){
     if(asBuffer==='text' && isXL){
       // Excel uploaded for a text-type field — convert to CSV text via XLSX.js
       const r=new FileReader();
-      r.onload=ev=>{ const buf=ev.target.result; ensureXLSX(()=>{ cb(xlsxToText(buf)); render(); }); };
+      r.onload=ev=>{
+        const buf=ev.target.result;
+        ensureXLSX(()=>{
+          const converted=xlsxToText(buf);
+          if(!converted || converted.trim().length===0){
+            showError("Could not convert Excel file to text. Please export this file as CSV from AppFolio and upload that instead.");
+            return;
+          }
+          cb(converted);
+          render();
+        });
+      };
       r.readAsArrayBuffer(f);
     } else {
       const useBuffer=asBuffer==='auto'?isXL:asBuffer;

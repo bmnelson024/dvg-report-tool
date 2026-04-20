@@ -1152,6 +1152,10 @@ ${(()=>{
     }).join("");
     return '<tr'+(vacant?' class="vacant"':'')+'>'+cells+'</tr>';
   }
+  function makeBuildingHeader(address){
+    const colspan = rrHdr.length||6;
+    return '<tr><td colspan="'+colspan+'" style="background:#1a1400;color:#B8942A;font-weight:700;font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:6px 8px;border-bottom:2px solid #B8942A;">'+address+'</td></tr>';
+  }
   if(!m.rentRollRows || !m.rentRollRows.length){
     return '<div class="page-data"><div class="pn">'+prop+'</div><div class="sh">Rent Roll \u2014 '+qtr+'</div>'
       +'<p style="font-family:sans-serif;font-size:13px;color:#7a6420;">No rent roll data available.</p>'
@@ -1159,19 +1163,44 @@ ${(()=>{
       +'<div class="pgn">'+pg.v()+'</div></div>';
   }
   var rows = m.rentRollRows;
+  // Build tbody with building address headers inserted between groups
   var out = "";
-  for(var i=0; i<rows.length; i+=ROWS_PER_RR){
-    var chunk = rows.slice(i, i+ROWS_PER_RR);
-    var cont = i>0 ? " (continued)" : "";
-    var tbody = chunk.map(makeRRRow).join("");
-    out += '<div class="page-data">'
-      + '<div class="pn">'+prop+'</div>'
-      + '<div class="sh">Rent Roll'+cont+' \u2014 '+qtr+'</div>'
-      + '<table class="rrt">'+thead+'<tbody>'+tbody+'</tbody></table>'
-      + '<div class="footer-prop">'+prop+'</div>'
-      + '<img src="'+LOGO_SYMBOL+'" alt="LeavenWealth" class="footer-logo"/>'
-      + '<div class="pgn">'+pg.v()+'</div>'
-      + '</div>';
+  var allTbodyRows = [];
+  var lastBuilding = null;
+  for(var ri=0; ri<rows.length; ri++){
+    var r = rows[ri];
+    var b = r.__building||"";
+    if(b && b !== lastBuilding){
+      allTbodyRows.push({__isBuildingHeader:true, address:b});
+      lastBuilding = b;
+    }
+    allTbodyRows.push(r);
+  }
+  // Paginate with building headers counted as rows
+  var ROWS_PER_RR_ADJ = 26; // slightly fewer to account for header rows
+  var pageRows = [];
+  var pageCount = 0;
+  var i = 0;
+  while(i < allTbodyRows.length){
+    pageRows.push(allTbodyRows[i]);
+    i++;
+    var isLast = i >= allTbodyRows.length;
+    if(pageRows.length >= ROWS_PER_RR_ADJ || isLast){
+      var cont = pageCount>0 ? " (continued)" : "";
+      var tbody = pageRows.map(function(row){
+        return row.__isBuildingHeader ? makeBuildingHeader(row.address) : makeRRRow(row);
+      }).join("");
+      out += '<div class="page-data">'
+        + '<div class="pn">'+prop+'</div>'
+        + '<div class="sh">Rent Roll'+cont+' \u2014 '+qtr+'</div>'
+        + '<table class="rrt">'+thead+'<tbody>'+tbody+'</tbody></table>'
+        + '<div class="footer-prop">'+prop+'</div>'
+        + '<img src="'+LOGO_SYMBOL+'" alt="LeavenWealth" class="footer-logo"/>'
+        + '<div class="pgn">'+pg.v()+'</div>'
+        + '</div>';
+      pageRows = [];
+      pageCount++;
+    }
   }
   return out;
 })()}
@@ -1806,6 +1835,19 @@ function processDataAppFolio() {
   try {
     showError("");
 
+    // ── Check for missing files upfront (files are not persisted across sessions) ──
+    const _requiredForProcess = {
+      income: "Income Statement",
+      rr1: "Rent Roll — Month 1",
+      rr2: "Rent Roll — Month 2",
+      rr3: "Rent Roll — Month 3",
+    };
+    const _missingFiles = Object.entries(_requiredForProcess).filter(([k])=>!state.files[k]).map(([,label])=>label);
+    if(_missingFiles.length){
+      showError("Please re-upload the following files before processing (files are not stored between sessions): " + _missingFiles.join(", ") + ".");
+      return;
+    }
+
     // ── Income Statement (Excel) — use parseQuarterFromExcel for AppFolio 12-month statements
     // so we sum only the 3 current-quarter months rather than the full-year "Total" column.
     const parsed = parseQuarterFromExcel(state.files.income, state.currentQuarter||"");
@@ -1837,7 +1879,21 @@ function processDataAppFolio() {
     const occupancy = Math.round((occ1 + occ2 + occ3) / 3);
 
     // ── Rent Roll — Loss to Lease & Rent Roll display ────────────────────────
-    const finalRows = parseDelim(state.files.rr3).filter(r => {
+    // Parse all rows, tracking which building each unit belongs to
+    const _allRRRows = parseDelim(state.files.rr3);
+    let _currentBuilding = "";
+    const _buildingOrder = [];
+    _allRRRows.forEach(r => {
+      const u = (r["Unit"]||"").trim();
+      if(/^->/.test(u) || u.length >= 50) {
+        // Extract address from e.g. "-> Dreamvesting Rentals (3302 Burt St) - 3302 Burt St Omaha, NE"
+        const addrMatch = u.replace(/^->\s*/,"").match(/\(([^)]+)\)\s*-\s*(.+)/);
+        _currentBuilding = addrMatch ? addrMatch[2].trim() : u.replace(/^->\s*/,"").replace(/\([^)]*\)/g,"").trim();
+        if(!_buildingOrder.includes(_currentBuilding)) _buildingOrder.push(_currentBuilding);
+      }
+      r.__building = _currentBuilding;
+    });
+    const finalRows = _allRRRows.filter(r => {
       const u = (r["Unit"]||"").trim();
       return u && !/^\d+\s*units?$/i.test(u) && !/^total/i.test(u) && !/^->/.test(u) && u.length < 50;
     });
@@ -1869,8 +1925,8 @@ function processDataAppFolio() {
     const rrHeaders = rrColMap.map(c=>c.label);
     const statusHeader = rrAllHeaders.find(h=>/^status$/i.test(h.trim()))||null;
     const rentRollRows = finalRows
-      .map(r=>{const o={};rrColMap.forEach(c=>o[c.label]=r[c.src]??"");const _st=(statusHeader?r[statusHeader]||"":"").toUpperCase();o.__vacant=!!(_st.includes("VACANT")||_st==="NOTICE-UNRENTED");return o;})
-      .sort((a,b)=>a.__vacant===b.__vacant?0:a.__vacant?1:-1);
+      .map(r=>{const o={};rrColMap.forEach(c=>o[c.label]=r[c.src]??"");const _st=(statusHeader?r[statusHeader]||"":"").toUpperCase();o.__vacant=!!(_st.includes("VACANT")||_st==="NOTICE-UNRENTED");o.__building=r.__building||"";return o;})
+      .sort((a,b)=>{if(a.__building!==b.__building)return _buildingOrder.indexOf(a.__building)-_buildingOrder.indexOf(b.__building);return a.__vacant===b.__vacant?0:a.__vacant?1:-1;});
 
     // ── Delinquency ──────────────────────────────────────────────────────────
     // From "Delinquency As Of" report — Total row, Amount Receivable column
@@ -2977,7 +3033,11 @@ function render(){
         ${chartRow("chart_loss_to_lease","Loss to Lease")}
       </div>`;
       const afUploaded=Object.keys(state.files).filter(k=>["income","rr1","rr2","rr3","leasingSummary","renewalSummary","delinquency"].includes(k)&&state.files[k]).length;
-      el.innerHTML = commonTop + `
+      const _resumeNotice = (state.metrics && afUploaded===0) ? `
+      <div style="background:#fef3cd;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:#92400e;">
+        <strong>📂 Resuming saved report</strong> — Files are not stored between sessions. Please re-upload your AppFolio exports below before re-processing.
+      </div>` : "";
+      el.innerHTML = commonTop + _resumeNotice + `
       <div class="section-label">AppFolio Reports <span style="margin-left:8px;background:#fdf8ec;color:#96771f;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">${afUploaded}/7 uploaded</span></div>
       <div style="background:#fdf8ec;border:1px solid #e8d49a;border-radius:10px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px">
         <div>

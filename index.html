@@ -152,12 +152,12 @@ const LOGO_SYMBOL = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
 
 const PREV_SAFE = { occupancy:0, income:0, expenses:0, noi:0, capex:0, expenseCategories:[] };
 const STEPS = ["Upload Data", "Review Metrics", "Generate Report"];
-const SAVES_INDEX_KEY = "lw_saves_index";
-const SAVE_PREFIX = "lw_save_";
-const CHARTS_PREFIX = "lw_charts_";
-const INV_CHARTS_PREFIX = "lw_invcharts_";
-const FILES_PREFIX = "lw_files_";
-const INV_FILES_PREFIX = "lw_invfiles_";
+const SAVES_INDEX_KEY = "dv_saves_index";
+const SAVE_PREFIX = "dv_save_";
+const CHARTS_PREFIX = "dv_charts_";
+const INV_CHARTS_PREFIX = "dv_invcharts_";
+const FILES_PREFIX = "dv_files_";
+const INV_FILES_PREFIX = "dv_invfiles_";
 // ─── STORAGE LAYER ────────────────────────────────────────────────────────────
 // Reads are synchronous from an in-memory cache loaded at startup.
 // Writes update the cache immediately and persist to IndexedDB asynchronously.
@@ -172,7 +172,7 @@ function idbInit(cb){
   setTimeout(done,2000);
   try{
     if(!window.indexedDB){done();return;}
-    const req=indexedDB.open('leavenwealth_db',1);
+    const req=indexedDB.open('dreamvesting_db',1);
     req.onupgradeneeded=e=>{
       try{e.target.result.createObjectStore('items');}catch(e2){}
     };
@@ -215,11 +215,11 @@ function dbKeys(){return Object.keys(_dbCache);}
 function migrateLegacyData(){
   try{
     const toMigrate=[];
-    for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('lw_'))toMigrate.push(k);}
+    for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('dv_'))toMigrate.push(k);}
     if(toMigrate.length===0)return;
     toMigrate.forEach(k=>{const v=localStorage.getItem(k);if(v!=null)dbSet(k,v);});
     toMigrate.forEach(k=>localStorage.removeItem(k));
-    console.log('LeavenWealth: migrated '+toMigrate.length+' items localStorage → IndexedDB');
+    console.log('Dreamvesting: migrated '+toMigrate.length+' items localStorage → IndexedDB');
   }catch(e){}
 }
 
@@ -228,7 +228,7 @@ function downloadBackup(){
     const blob=new Blob([JSON.stringify(_dbCache)],{type:'application/json'});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
-    a.href=url; a.download='leavenwealth-backup-'+new Date().toISOString().slice(0,10)+'.json';
+    a.href=url; a.download='dreamvesting-backup-'+new Date().toISOString().slice(0,10)+'.json';
     a.click(); URL.revokeObjectURL(url);
   }catch(e){showError('Could not create backup: '+e.message);}
 }
@@ -2211,7 +2211,7 @@ function printReport(){
   fr.contentWindow.focus();
   fr.contentWindow.print();
 }
-function photoStorageKey(name){ return "lw_photo_" + (name||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"_"); }
+function photoStorageKey(name){ return "dv_photo_" + (name||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"_"); }
 // Resize and re-encode a photo as JPEG before storing — keeps size small for efficient IndexedDB storage.
 // Max 1200px on the long edge, 80% quality — plenty of detail for a report cover photo.
 function compressPhoto(dataUri, cb){
@@ -2242,11 +2242,11 @@ function loadPhotoForProperty(name){
     if(exact) return exact;
     // Fuzzy: scan all lw_photo_* keys — find one where the stored name contains
     // our lookup name as a substring (or vice versa), min 5 chars to avoid false matches
-    const norm=targetKey.slice("lw_photo_".length);
+    const norm=targetKey.slice("dv_photo_".length);
     let best=null, bestScore=0;
     for(const k of dbKeys()){
-      if(!k.startsWith("lw_photo_")) continue;
-      const stored=k.slice("lw_photo_".length);
+      if(!k.startsWith("dv_photo_")) continue;
+      const stored=k.slice("dv_photo_".length);
       const score=stored.includes(norm)?norm.length:(norm.includes(stored)?stored.length:0);
       if(score>=5&&score>bestScore){best=k;bestScore=score;}
     }
@@ -2354,7 +2354,7 @@ function onPropertyNameChange(val){
   if(!state.prevOccupancyInput){ tryAutoLoadPriorOccupancy(); }
 }
 // ─── ASSET FACTS PERSISTENCE ──────────────────────────────────────────────────
-function assetFactsKey(name){ return "lw_assetfacts_" + (name||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"_"); }
+function assetFactsKey(name){ return "dv_assetfacts_" + (name||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"_"); }
 function saveAssetFacts(name, facts){
   if(!name||!facts) return;
   dbSet(assetFactsKey(name), JSON.stringify(facts));

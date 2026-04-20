@@ -875,7 +875,9 @@ const buildReport = (m, n, chartSrc, photo, propertyName, quarter, prevLabel, as
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:Georgia,serif;background:var(--cream);color:var(--text);}
 .page{width:816px;min-height:1056px;background:white;margin:20px auto;padding:60px;box-shadow:0 4px 20px rgba(26,20,0,.12);position:relative;page-break-after:always;break-after:page;border-left:6px solid var(--teal);}
-.cover{background:var(--dark);border-left:none;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:80px 60px;}
+.cover{background:var(--dark);border-left:none;display:flex;flex-direction:column;align-items:center;text-align:center;padding:0;overflow:hidden;}
+.cover-logo-band{width:100%;background:white;display:flex;align-items:center;justify-content:center;padding:28px 60px;border-bottom:4px solid var(--teal);}
+.cover-body{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:48px 60px;width:100%;}
 .cover .eyebrow{color:rgba(255,255,255,0.55);font-size:13px;letter-spacing:4px;text-transform:uppercase;font-family:sans-serif;margin-bottom:20px;}
 .cover h1{color:white;font-size:56px;font-weight:700;margin-bottom:10px;}
 .cover .quarter{color:var(--teal);font-size:26px;font-weight:400;letter-spacing:3px;margin-bottom:36px;font-family:sans-serif;}
@@ -954,12 +956,16 @@ body{font-family:Georgia,serif;background:var(--cream);color:var(--text);}
 }
 </style></head><body>
 <div class="page cover">
-    <img src="${LOGO_FULL}" alt="LeavenWealth" style="height:60px;width:auto;margin-bottom:28px;mix-blend-mode:screen;"/>
-  <div class="eyebrow">Investor Report</div>
-  <div class="quarter">${qtr.replace(/Q(\d)/i,"Q$1").replace(/\s*(\d{4})/," · $1")}</div>
-  <div class="divider"></div>
-  <h1>${prop}</h1>
-  ${photo?`<div style="width:480px;height:280px;border-radius:12px;overflow:hidden;margin-top:36px;"><img src="${photo}" style="width:100%;height:100%;object-fit:cover;display:block;border:none;outline:none;" alt="${prop}"/></div>`:""}
+  <div class="cover-logo-band">
+    <img src="${LOGO_FULL}" alt="Dreamvesting" style="height:56px;width:auto;"/>
+  </div>
+  <div class="cover-body">
+    <div class="eyebrow">Investor Report</div>
+    <div class="quarter">${qtr.replace(/Q(\d)/i,"Q$1").replace(/\s*(\d{4})/," · $1")}</div>
+    <div class="divider"></div>
+    <h1>${prop}</h1>
+    ${photo?`<div style="width:480px;height:260px;border-radius:12px;overflow:hidden;margin-top:32px;"><img src="${photo}" style="width:100%;height:100%;object-fit:cover;display:block;border:none;outline:none;" alt="${prop}"/></div>`:""}
+  </div>
 </div>
 ${(()=>{
   const summaryOverflow = (n.income.length + n.expenses.length + n.capex.length + n.outlook.length) > 1000 || n.outlook.length > 500;
@@ -1388,7 +1394,9 @@ function buildInvestmentReport(m,n,invName,quarter,loan,sections){
 :root{--dark:#1a1400;--teal:#B8942A;--teal-mid:#96771f;--teal-light:#fdf8ec;--cream:#ffffff;--text:#1a1400;--muted:#7a6420;--border:#e8d49a;}
 *{margin:0;padding:0;box-sizing:border-box;}body{font-family:Georgia,serif;background:var(--cream);color:var(--text);}
 .page{width:816px;min-height:1056px;background:white;margin:20px auto;padding:48px 52px 70px;box-shadow:0 4px 20px rgba(26,20,0,.12);position:relative;page-break-after:always;break-after:page;border-left:6px solid var(--teal);}
-.cover{background:var(--dark);border-left:none;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:80px 60px;}
+.cover{background:var(--dark);border-left:none;display:flex;flex-direction:column;align-items:center;text-align:center;padding:0;overflow:hidden;}
+.cover-logo-band{width:100%;background:white;display:flex;align-items:center;justify-content:center;padding:28px 60px;border-bottom:4px solid var(--teal);}
+.cover-body{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:48px 60px;width:100%;}
 .cover .eyebrow{color:rgba(255,255,255,0.55);font-size:13px;letter-spacing:4px;text-transform:uppercase;font-family:sans-serif;margin-bottom:20px;}
 .cover h1{color:white;font-size:56px;font-weight:700;margin-bottom:10px;}
 .cover .quarter{color:var(--teal);font-size:26px;font-weight:400;letter-spacing:3px;margin-bottom:36px;font-family:sans-serif;}
@@ -1433,13 +1441,17 @@ function buildInvestmentReport(m,n,invName,quarter,loan,sections){
 
 <!-- PAGE 1: COVER -->
 <div class="page cover">
-  <img src="${LOGO_FULL}" alt="LeavenWealth" style="height:60px;width:auto;margin-bottom:28px;mix-blend-mode:screen;"/>
-  <div class="eyebrow">Investor Report</div>
-  <div class="quarter">${qtr.replace(/Q(\d)/i,"Q$1").replace(/\s*(\d{4})/," · $1")}</div>
-  <div class="divider"></div>
-  <h1>${inv}</h1>
-  ${n_photos>0?photoStrip:`<div style="margin-top:20px;font-family:sans-serif;font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;">${propNames}</div>`}
-  ${n_photos>0?`<div style="margin-top:16px;font-family:sans-serif;font-size:10px;color:rgba(255,255,255,0.35);letter-spacing:2px;text-transform:uppercase;">${propNames}</div>`:""}
+  <div class="cover-logo-band">
+    <img src="${LOGO_FULL}" alt="Dreamvesting" style="height:56px;width:auto;"/>
+  </div>
+  <div class="cover-body">
+    <div class="eyebrow">Investor Report</div>
+    <div class="quarter">${qtr.replace(/Q(\d)/i,"Q$1").replace(/\s*(\d{4})/," · $1")}</div>
+    <div class="divider"></div>
+    <h1>${inv}</h1>
+    ${n_photos>0?photoStrip:`<div style="margin-top:20px;font-family:sans-serif;font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;">${propNames}</div>`}
+    ${n_photos>0?`<div style="margin-top:16px;font-family:sans-serif;font-size:10px;color:rgba(255,255,255,0.35);letter-spacing:2px;text-transform:uppercase;">${propNames}</div>`:""}
+  </div>
 </div>
 
 <!-- PAGE 2: SUMMARY — narratives + QoQ comparison -->

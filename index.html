@@ -1343,7 +1343,7 @@ function parsePropertyMetrics(prop){
   if(lt){newLeases=parseInt(lt["Leased"]||0)||0;inquiries=parseInt(lt["Inquiries Received"]||0)||0;applications=parseInt(lt["Applications Received"]||0)||0;}
   else{lr.forEach(r=>{newLeases+=parseInt(r["Leased"]||0)||0;inquiries+=parseInt(r["Inquiries Received"]||0)||0;applications+=parseInt(r["Applications Received"]||0)||0;});}
   const rt=prop.files.renewalSummary||"";
-  const rm=rt.match(/Total\s+(\d+)\s+Offers/i);
+  const rm=rt.match(/Total\s+(\d+)\s+Offers?/i);
   if(rm)renewals=parseInt(rm[1])||0;else renewals=parseDelim(rt).filter(r=>/renewed/i.test(r["Status"]||"")).length;
   const _tb2=prop.files.trialBalance||prop.files.bank||"";
   const tr2=parseDelim(_tb2);
@@ -2008,9 +2008,9 @@ function processDataAppFolio() {
     // Format varies: "Total X Offers", "Total Offers: X", tabular with Count/Renewals column
     let renewals = 0;
     const renewalText = state.files.renewalSummary||"";
-    const totalMatch = renewalText.match(/Total\s+(\d+)\s+Offers/i)
-      || renewalText.match(/Total\s+Offers[:\s]+(\d+)/i)
-      || renewalText.match(/(\d+)\s+Total\s+Offers/i);
+    const totalMatch = renewalText.match(/Total\s+(\d+)\s+Offers?/i)
+      || renewalText.match(/Total\s+Offers?[:\s]+(\d+)/i)
+      || renewalText.match(/(\d+)\s+Total\s+Offers?/i);
     if (totalMatch) {
       renewals = parseInt(totalMatch[1])||0;
     } else {

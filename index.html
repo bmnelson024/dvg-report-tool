@@ -1333,7 +1333,7 @@ function parsePropertyMetrics(prop){
     return tr.length>0?Math.round(((tr.length-vc)/tr.length)*100):0;
   };
   occ1=calcOccAF(prop.files.rr1); occ2=calcOccAF(prop.files.rr2); occ3=calcOccAF(prop.files.rr3);
-  const fr=parseDelim(prop.files.rr3||"").filter(r=>{const u=(r["Unit"]||"").trim();return u&&!/^\d+\s*units?$/i.test(u)&&!/^total/i.test(u);});
+  const fr=parseDelim(prop.files.rr3||"").filter(r=>{const u=(r["Unit"]||"").trim();if(/^\d+\s*units?$/i.test(u)||/^total/i.test(u)||/^->/.test(u)||u.length>=50)return false;return u||(r["BD/BA"]||r["Status"]||r["Tenant"]||"").trim();});
   fr.forEach(r=>{const st=(r["Status"]||"").toUpperCase();if(!getVacantFlag(r)&&st!=="NOTICE-UNRENTED"){mkt+=parseCur(r["Market Rent"]||r["MarketRent"]||r["Mkt Rent"]||0);act+=parseCur(r["Rent"]||0);}});
   const dr=parseDelim(prop.files.delinquency||"");
   const dt=dr.find(r=>/^total$/i.test((r["Unit"]||r["Name"]||"").trim()));
@@ -1350,7 +1350,7 @@ function parsePropertyMetrics(prop){
   const cr=tr2.find(r=>{const gl=(r["GL Account"]||"").trim();return gl==="1150"||/^1150[\s\-:]/.test(gl);});
   if(cr)cashOnHand=parseCur(cr["Ending Balance"]||0);else{const br=tr2[0]||{};cashOnHand=parseCur(br["Balance"]||br["Cash Balance"]||0);}
   const occupancy=Math.round((occ1+occ2+occ3)/3);
-  const unitCount=parseDelim(prop.files.rr3||"").filter(r=>{const u=(r["Unit"]||"").trim();return u&&!/^\d+\s*units?$/i.test(u)&&!/^total/i.test(u)&&!/^->/.test(u);}).length;
+  const unitCount=parseDelim(prop.files.rr3||"").filter(r=>{const u=(r["Unit"]||"").trim();if(/^\d+\s*units?$/i.test(u)||/^total/i.test(u)||/^->/.test(u)||u.length>=50)return false;return u||(r["BD/BA"]||r["Status"]||r["Tenant"]||"").trim();}).length;
   const {m1,m2,m3}=prop.econOcc;
   const avgEconOcc=(m1&&m2&&m3)?Math.round((parseFloat(m1)+parseFloat(m2)+parseFloat(m3))/3).toString():null;
   const remodels = prop.files.capexDetail ? parseCapexDetail(prop.files.capexDetail) : null;
@@ -1932,7 +1932,10 @@ function processDataAppFolio() {
     });
     const finalRows = _allRRRows.filter(r => {
       const u = (r["Unit"]||"").trim();
-      return u && !/^\d+\s*units?$/i.test(u) && !/^total/i.test(u) && !/^->/.test(u) && u.length < 50;
+      // Exclude building header rows, totals, and summary rows
+      if (/^\d+\s*units?$/i.test(u) || /^total/i.test(u) || /^->/.test(u) || u.length >= 50) return false;
+      // Include rows with a Unit value OR blank-Unit rows that are real units (single-family exports)
+      return u || (r["BD/BA"]||r["Status"]||r["Tenant"]||"").trim();
     });
     let mkt=0, act=0;
     // Debug: log first few rows to console so we can see what's being parsed

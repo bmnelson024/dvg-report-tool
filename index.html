@@ -276,7 +276,7 @@ let state = {
     inv_operating_income:null, inv_operating_expense:null,
     inv_income_by_property:null, inv_expense_by_property:null,
     inv_income_vs_expense:null, inv_noi:null, inv_noi_by_property:null,
-    inv_utility:null, inv_lease_expirations:null, inv_rent_growth:null,
+    inv_lease_expirations:null, inv_rent_growth:null,
     inv_occupancy_rate:null, inv_occupancy_by_property:null
   },
   invNarratives: { income:"", expenses:"", outlook:"" },
@@ -422,7 +422,7 @@ function loadSave(key){
     const data=JSON.parse(dbGet(SAVE_PREFIX+key)||"null");
     if(!data){showError("Save data not found.");return;}
     const emptyCharts={chart_operating_income:null,chart_operating_expense:null,chart_income_vs_expense:null,chart_noi:null,chart_lease_expirations:null,chart_rent_growth:null,chart_occupancy_rate:null,chart_capital_expense:null,chart_maintenance_expense:null,chart_loss_to_lease:null};
-    const emptyInvCharts={inv_operating_income:null,inv_operating_expense:null,inv_income_by_property:null,inv_expense_by_property:null,inv_income_vs_expense:null,inv_noi:null,inv_noi_by_property:null,inv_utility:null,inv_lease_expirations:null,inv_rent_growth:null,inv_occupancy_rate:null,inv_occupancy_by_property:null};
+    const emptyInvCharts={inv_operating_income:null,inv_operating_expense:null,inv_income_by_property:null,inv_expense_by_property:null,inv_income_vs_expense:null,inv_noi:null,inv_noi_by_property:null,inv_lease_expirations:null,inv_rent_growth:null,inv_occupancy_rate:null,inv_occupancy_by_property:null};
     const restoredPhoto=loadPhotoForProperty(data.propertyName||'');
     // Restore expenseCategories into prevMetrics if present (Fix: was previously stripped on load)
     const restoredPrevMetrics=data.prevMetrics
@@ -1266,7 +1266,6 @@ const INV_CHART_MAP = [
   { key:"inv_lease_expirations",    match:"lease expirations" },
   { key:"inv_rent_growth",          match:"rent growth" },
   { key:"inv_occupancy_rate",       match:"occupancy rate" },
-  { key:"inv_utility",              match:"utility" },
 ];
 function addInvProperty(){
   state.invProperties.push({id:Date.now(),name:"",source:'appfolio',expanded:true,
@@ -1589,7 +1588,6 @@ ${sec.financialCharts?`
     ${C("inv_income_vs_expense","Operating Income vs. Operating Expense")}
     ${C("inv_noi","NOI vs. Pro Forma")}
     ${C("inv_noi_by_property","NOI By Property")}
-    ${C("inv_utility","Utility Income vs. Expenses")}
   </div>
   <div class="footer-prop">${inv}</div><img src="${LOGO_SYMBOL}" class="footer-logo"/><div class="pgn">${pg.v()}</div>
 </div>`:""}
@@ -1848,7 +1846,6 @@ function renderInvestmentStep0(){
       ${invChartRow("inv_occupancy_rate","Occupancy Rate")}
       ${invChartRow("inv_occupancy_by_property","Occupancy Rate By Property")}
       ${invChartRow("inv_income_vs_expense","Operating Income vs. Expense")}
-      ${invChartRow("inv_utility","Utility Income vs. Expenses")}
       ${invChartRow("inv_lease_expirations","Lease Expirations by Month")}
       ${invChartRow("inv_rent_growth","Rent Growth & Market Rent")}
     </div>
@@ -3204,7 +3201,7 @@ function calcEconAvg(){
 }
 function resetAll(){
   state={...state,showHome:false,source:null,step:0,propertyName:"",currentQuarter:"",prevQuarterLabel:"",assetFacts:null,files:{income:null,rr1:null,rr2:null,rr3:null,leasing:null,leasingSummary:null,renewalSummary:null,bank:null,trialBalance:null,delinquency:null,rentEngine:null,capexDetail:null},charts:{chart_operating_income:null,chart_operating_expense:null,chart_income_vs_expense:null,chart_noi:null,chart_lease_expirations:null,chart_rent_growth:null,chart_occupancy_rate:null,chart_capital_expense:null,chart_maintenance_expense:null,chart_loss_to_lease:null},econOcc:{m1:"",m2:"",m3:""},prevMetrics:null,propertyPhoto:null,metrics:null,narratives:{income:"",expenses:"",capex:"",outlook:""},reportHTML:null,generating:false,
-  investmentName:"",invProperties:[],invCharts:{inv_operating_income:null,inv_operating_expense:null,inv_income_by_property:null,inv_expense_by_property:null,inv_income_vs_expense:null,inv_noi:null,inv_noi_by_property:null,inv_utility:null,inv_lease_expirations:null,inv_rent_growth:null,inv_occupancy_rate:null,inv_occupancy_by_property:null},invNarratives:{income:"",expenses:"",outlook:""},invMetrics:null,invReportHTML:null,invLoan:{principalInception:"",principalInceptionDate:"",principalCurrent:"",principalCurrentDate:"",writeoffs:""},invPrevMetrics:null,prevOccupancyInput:""};
+  investmentName:"",invProperties:[],invCharts:{inv_operating_income:null,inv_operating_expense:null,inv_income_by_property:null,inv_expense_by_property:null,inv_income_vs_expense:null,inv_noi:null,inv_noi_by_property:null,inv_lease_expirations:null,inv_rent_growth:null,inv_occupancy_rate:null,inv_occupancy_by_property:null},invNarratives:{income:"",expenses:"",outlook:""},invMetrics:null,invReportHTML:null,invLoan:{principalInception:"",principalInceptionDate:"",principalCurrent:"",principalCurrentDate:"",writeoffs:""},invPrevMetrics:null,prevOccupancyInput:""};
   render();
 }
 // Startup: open IndexedDB, load cache, migrate any legacy localStorage data, then render

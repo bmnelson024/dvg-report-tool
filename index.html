@@ -1342,7 +1342,7 @@ function parsePropertyMetrics(prop){
   const lt=lr.find(r=>/^total/i.test(r["Unit Type"]||""));
   if(lt){newLeases=parseInt(lt["Leased"]||0)||0;inquiries=parseInt(lt["Inquiries Received"]||0)||0;applications=parseInt(lt["Applications Received"]||0)||0;}
   else{lr.forEach(r=>{newLeases+=parseInt(r["Leased"]||0)||0;inquiries+=parseInt(r["Inquiries Received"]||0)||0;applications+=parseInt(r["Applications Received"]||0)||0;});}
-  const rt=prop.files.renewalSummary||"";
+  const rt=typeof prop.files.renewalSummary==="string"?prop.files.renewalSummary:"";
   const rm=rt.match(/Total\s+(\d+)\s+Offers?/i);
   if(rm)renewals=parseInt(rm[1])||0;else renewals=parseDelim(rt).filter(r=>/renewed/i.test(r["Status"]||"")).length;
   const _tb2=prop.files.trialBalance||prop.files.bank||"";
@@ -2010,7 +2010,7 @@ function processDataAppFolio() {
     // ── Renewal Summary ──────────────────────────────────────────────────────
     // Format varies: "Total X Offers", "Total Offers: X", tabular with Count/Renewals column
     let renewals = 0;
-    const renewalText = state.files.renewalSummary||"";
+    const renewalText = typeof state.files.renewalSummary === "string" ? state.files.renewalSummary : "";
     const totalMatch = renewalText.match(/Total\s+(\d+)\s+Offers?/i)
       || renewalText.match(/Total\s+Offers?[:\s]+(\d+)/i)
       || renewalText.match(/(\d+)\s+Total\s+Offers?/i);
@@ -2027,7 +2027,8 @@ function processDataAppFolio() {
         renewalRows.forEach(r=>{
           for(const col of colNames){ const v=parseInt(r[col]||""); if(!isNaN(v)&&v>0){renewals+=v;break;} }
         });
-        if(renewals===0) showError("Warning: Could not parse renewal count from the Renewal Summary file — renewals will show as 0. Verify the file format.");
+        // Only warn if a file was actually uploaded (empty string = no file or zero offers is normal)
+        if(renewals===0 && renewalText.trim().length > 0 && !/Total\s+0\s+Offers?/i.test(renewalText)) showError("Warning: Could not parse renewal count from the Renewal Summary file — renewals will show as 0. Verify the file format.");
       }
     }
 

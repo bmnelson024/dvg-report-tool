@@ -84,6 +84,8 @@
   .home-meta { font-size: 12px; color: #7a6420; margin-top: 3px; }
   .home-resume-btn { background: #1a1400; color: white; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; white-space: nowrap; }
   .home-delete-btn { background: white; color: #dc2626; border: 1px solid #fca5a5; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .home-nextq-btn { background: white; color: #96771f; border: 1px solid #B8942A; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .home-nextq-btn:hover { background: #fdf8ec; }
   .save-btn { background: #fdf8ec; color: #96771f; border: 1px solid #e8d49a; padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
   .save-btn:hover { background: #e8d49a; }
   .all-reports-link { font-size: 12px; color: #7a6420; cursor: pointer; text-decoration: underline; margin-bottom: 6px; display: inline-block; }
@@ -365,7 +367,7 @@ function clearInvPrevMetrics(){
 }
 function saveProgress(){
   const isInv = state.source==='investment';
-  if(!isInv && !state.metrics){showError("Nothing to save yet — process your data files first.");return;}
+  if(!isInv && !state.metrics && !state.prevMetrics){showError("Nothing to save yet — process your data files first.");return;}
   // Investment saves are allowed at any step (even step 0 before processing)
   const propName = isInv ? (state.investmentName||"") : (state.propertyName||"");
   if(!propName){showError(isInv?"Set an Investment Name before saving.":"Set a Property Name before saving.");return;}
@@ -472,6 +474,72 @@ function deleteSave(key){
     render();
   }catch(e){}
 }
+function startNextQuarter(key){
+  try{
+    const data=JSON.parse(dbGet(SAVE_PREFIX+key)||"null");
+    if(!data){showError("Save data not found.");return;}
+    const isInv=data.source==='investment';
+    const nextLabel=calcNextQuarterLabel(data.currentQuarter)||"";
+    const emptyFiles={income:null,rr1:null,rr2:null,rr3:null,leasing:null,leasingSummary:null,renewalSummary:null,bank:null,trialBalance:null,delinquency:null,rentEngine:null,capexDetail:null};
+    const emptyCharts={chart_operating_income:null,chart_operating_expense:null,chart_income_vs_expense:null,chart_noi:null,chart_lease_expirations:null,chart_rent_growth:null,chart_occupancy_rate:null,chart_capital_expense:null,chart_maintenance_expense:null,chart_loss_to_lease:null,chart_noi_vs_debt_service:null};
+    const emptyInvCharts={inv_operating_income:null,inv_operating_expense:null,inv_income_by_property:null,inv_expense_by_property:null,inv_income_vs_expense:null,inv_noi:null,inv_noi_by_property:null,inv_lease_expirations:null,inv_rent_growth:null,inv_occupancy_rate:null,inv_occupancy_by_property:null,inv_noi_vs_debt_service:null};
+    let newState;
+    if(isInv){
+      // Carry forward each property's name/source but clear metrics & files — those get re-uploaded each quarter
+      const carriedProps=(data.invProperties||[]).map(p=>({
+        id:p.id, name:p.name, source:p.source, econOcc:{m1:"",m2:"",m3:""},
+        metrics:null, expanded:false, _imported:false, _importedFrom:null,
+        files:{...emptyFiles}
+      }));
+      newState={
+        showHome:false, source:'investment', step:0,
+        propertyName:"", currentQuarter:nextLabel, prevQuarterLabel:data.currentQuarter||"",
+        files:{...emptyFiles}, charts:{...emptyCharts}, econOcc:{m1:"",m2:"",m3:""},
+        propertyPhoto:null, assetFacts:null, prevMetrics:null, metrics:null,
+        narratives:{income:"",expenses:"",capex:"",outlook:""}, reportHTML:null, generating:false,
+        investmentName:data.investmentName||"", invProperties:carriedProps,
+        invCharts:{...emptyInvCharts}, invNarratives:{income:"",expenses:"",outlook:""},
+        invMetrics:null, invReportHTML:null,
+        // Loan principal figures usually carry over as a starting point; writeoffs is a per-quarter figure so it resets
+        invLoan:{...(data.invLoan||{principalInception:"",principalInceptionDate:"",principalCurrent:"",principalCurrentDate:"",writeoffs:""}),writeoffs:""},
+        invPrevMetrics:data.invMetrics||null,
+        prevOccupancyInput:"",
+        invSections:data.invSections||{loanPrincipal:true,writeoffs:true,financialCharts:true,leasingSection:true},
+        _showInvPrevPicker:false, _invPrevSource:key, _savedThisStep:false
+      };
+    } else {
+      const restoredPhoto=loadPhotoForProperty(data.propertyName||'');
+      const prevMetrics=data.metrics?{
+        occupancy:data.metrics.occupancy, income:data.metrics.totalIncome,
+        expenses:data.metrics.totalExpense, noi:data.metrics.noi, capex:data.metrics.capex,
+        expenseCategories:data.metrics.expenseCategories||[]
+      }:null;
+      newState={
+        showHome:false, source:data.source||'appfolio', step:0,
+        propertyName:data.propertyName||"", currentQuarter:nextLabel, prevQuarterLabel:data.currentQuarter||"",
+        files:{...emptyFiles}, charts:{...emptyCharts},
+        econOcc:{m1:"",m2:"",m3:""}, propertyPhoto:restoredPhoto,
+        assetFacts:data.assetFacts||null, prevMetrics, metrics:null,
+        narratives:{income:"",expenses:"",capex:"",outlook:""}, reportHTML:null, generating:false,
+        investmentName:"", invProperties:[], invCharts:{...emptyInvCharts},
+        invNarratives:{income:"",expenses:"",outlook:""}, invMetrics:null, invReportHTML:null,
+        invLoan:{principalInception:"",principalInceptionDate:"",principalCurrent:"",principalCurrentDate:"",writeoffs:""},
+        invPrevMetrics:null,
+        prevOccupancyInput:prevMetrics&&prevMetrics.occupancy!=null?String(prevMetrics.occupancy):"",
+        invSections:{loanPrincipal:true,writeoffs:true,financialCharts:true,leasingSection:true},
+        _savedThisStep:false
+      };
+    }
+    state={...state,...newState};
+    if(!nextLabel){
+      showError("Could not detect the next quarter from \""+(data.currentQuarter||"")+"\" — set the Current Quarter manually, then save.");
+    } else {
+      // Persist immediately so the rolled-forward report shows up in Saved Reports right away.
+      saveProgress();
+    }
+    render();
+  }catch(e){showError("Failed to start next quarter: "+e.message);}
+}
 function showSavePrompt(onContinue){
   let m=document.getElementById("lw-save-modal");
   if(!m){
@@ -537,6 +605,7 @@ function renderHome(){
           <div class="home-meta">Saved ${fmtDate(s.savedAt||"")} &nbsp;·&nbsp; Step ${(s.step||0)+1} of 3</div>
         </div>
         <button class="home-resume-btn" onclick="loadSave('${s.key}')">Resume →</button>
+        <button class="home-nextq-btn" onclick="startNextQuarter('${s.key}')" title="Start the next quarter's report, carrying forward property/investment info and this quarter's numbers as the prior-quarter comparison">+ Next Quarter</button>
         <button class="home-delete-btn" onclick="deleteSave('${s.key}')">Delete</button>
       </div>`).join("")}
     <div style="margin-top:16px;display:flex;gap:10px">
@@ -2381,6 +2450,12 @@ function calcPrevQuarterLabel(quarter){
   if(!m) return null;
   const q=parseInt(m[1]),yr=parseInt(m[2]);
   return q===1?`Q4 ${yr-1}`:`Q${q-1} ${yr}`;
+}
+function calcNextQuarterLabel(quarter){
+  const m=(quarter||"").match(/[Qq]\s*([1-4])[\s\/\-]*(\d{4})/);
+  if(!m) return null;
+  const q=parseInt(m[1]),yr=parseInt(m[2]);
+  return q===4?`Q1 ${yr+1}`:`Q${q+1} ${yr}`;
 }
 function tryAutoLoadPriorOccupancy(){
   if(!state.propertyName||!state.currentQuarter) return false;

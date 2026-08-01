@@ -439,7 +439,7 @@ function loadSave(key){
       ? {...data.prevMetrics, expenseCategories:data.prevMetrics.expenseCategories||[]}
       : null;
     state={...state,
-      showHome:false, source:data.source||null,
+      showHome:false, source:data.source||null, rewritingNarratives:false,
       propertyName:data.propertyName||"", currentQuarter:data.currentQuarter||"",
       prevQuarterLabel:data.prevQuarterLabel||"",
       prevMetrics:restoredPrevMetrics,
@@ -3401,7 +3401,7 @@ function calcEconAvg(){
   return "";
 }
 function resetAll(){
-  state={...state,showHome:false,source:null,step:0,propertyName:"",currentQuarter:"",prevQuarterLabel:"",assetFacts:null,files:{income:null,rr1:null,rr2:null,rr3:null,leasing:null,leasingSummary:null,renewalSummary:null,bank:null,trialBalance:null,delinquency:null,rentEngine:null,capexDetail:null},charts:{chart_operating_income:null,chart_operating_expense:null,chart_income_vs_expense:null,chart_noi:null,chart_lease_expirations:null,chart_rent_growth:null,chart_occupancy_rate:null,chart_capital_expense:null,chart_maintenance_expense:null,chart_loss_to_lease:null,chart_noi_vs_debt_service:null},econOcc:{m1:"",m2:"",m3:""},prevMetrics:null,propertyPhoto:null,metrics:null,narratives:{income:"",expenses:"",capex:"",outlook:""},reportHTML:null,generating:false,
+  state={...state,showHome:false,source:null,step:0,rewritingNarratives:false,propertyName:"",currentQuarter:"",prevQuarterLabel:"",assetFacts:null,files:{income:null,rr1:null,rr2:null,rr3:null,leasing:null,leasingSummary:null,renewalSummary:null,bank:null,trialBalance:null,delinquency:null,rentEngine:null,capexDetail:null},charts:{chart_operating_income:null,chart_operating_expense:null,chart_income_vs_expense:null,chart_noi:null,chart_lease_expirations:null,chart_rent_growth:null,chart_occupancy_rate:null,chart_capital_expense:null,chart_maintenance_expense:null,chart_loss_to_lease:null,chart_noi_vs_debt_service:null},econOcc:{m1:"",m2:"",m3:""},prevMetrics:null,propertyPhoto:null,metrics:null,narratives:{income:"",expenses:"",capex:"",outlook:""},reportHTML:null,generating:false,
   investmentName:"",invProperties:[],invCharts:{inv_operating_income:null,inv_operating_expense:null,inv_income_by_property:null,inv_expense_by_property:null,inv_income_vs_expense:null,inv_noi:null,inv_noi_by_property:null,inv_lease_expirations:null,inv_rent_growth:null,inv_occupancy_rate:null,inv_occupancy_by_property:null,inv_noi_vs_debt_service:null},invNarratives:{income:"",expenses:"",capex:"",outlook:""},invMetrics:null,invReportHTML:null,invLoan:{principalInception:"",principalInceptionDate:"",principalCurrent:"",principalCurrentDate:"",writeoffs:""},invPrevMetrics:null,prevOccupancyInput:""};
   render();
 }

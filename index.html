@@ -1139,6 +1139,12 @@ ${(()=>{
     <div class="lc"><div class="ll">Avg Econ. Occupancy</div><div class="lv">${m.avgEconOcc?m.avgEconOcc+"%":"—"}</div></div>
     <div class="lc"><div class="ll">Capex Total</div><div class="lv">${fmtWhole(m.capex)}</div></div>
   </div>
+  <div class="footer-prop">${prop}</div>
+  <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
+  <div class="pgn">${pg.v()}</div>
+</div>
+<div class="page">
+  <div class="pn">${prop}</div><div class="sh">Leasing Charts — ${qtr}</div>
   <div class="cg">
     ${["chart_lease_expirations:Lease Expirations","chart_rent_growth:Rent Growth & Market Rent"].map(s=>{const[k,t]=s.split(":");const src=chartSrc(k);return src?`<div class="cb"><img src="${src}"/></div>`:`<div class="cb"><div class="np">${t} — not uploaded</div></div>`;}).join("")}
   </div>
@@ -1163,17 +1169,12 @@ ${(()=>{
   const extraChunks = [];
   for(let i=CAPEX_PER_PAGE; i<allItems.length; i+=CAPEX_PER_PAGE) extraChunks.push(allItems.slice(i,i+CAPEX_PER_PAGE));
   const capexRow = i => `<tr><td>${i.name}</td><td>${fmtWhole(i.amount)}</td></tr>`;
-  const chartsHtml = `<div class="sh" style="margin-top:8px">Capex &amp; Maintenance Charts</div>
-  <div class="cg">
-    ${["chart_capital_expense:Capital Expense","chart_maintenance_expense:Maintenance Expense"].map(s=>{const[k,t]=s.split(":");const src=chartSrc(k);return src?`<div class="cb"><img src="${src}"/></div>`:`<div class="cb"><div class="np">${t} — not uploaded</div></div>`;}).join("")}
-  </div>`;
   let out = `<div class="page">
   <div class="pn">${prop}</div><div class="sh">Capital Improvements — ${qtr}</div>
   <table class="cx"><tbody>
     ${firstChunk.length?firstChunk.map(capexRow).join(""):"<tr><td>No capital improvements recorded</td><td></td></tr>"}
     ${extraChunks.length?"":"<tr class=\"cxt\"><td>Total Capital Improvements</td><td>"+fmtWhole(m.capex)+"</td></tr>"}
   </tbody></table>
-  ${extraChunks.length?"":chartsHtml}
   <div class="footer-prop">${prop}</div>
   <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
@@ -1186,12 +1187,20 @@ ${(()=>{
     ${chunk.map(capexRow).join("")}
     ${isLast?`<tr class="cxt"><td>Total Capital Improvements</td><td>${fmtWhole(m.capex)}</td></tr>`:""}
   </tbody></table>
-  ${isLast?chartsHtml:""}
   <div class="footer-prop">${prop}</div>
   <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
 </div>`;
   });
+  out += `<div class="page">
+  <div class="pn">${prop}</div><div class="sh">Capex &amp; Maintenance Charts — ${qtr}</div>
+  <div class="cg">
+    ${["chart_capital_expense:Capital Expense","chart_maintenance_expense:Maintenance Expense"].map(s=>{const[k,t]=s.split(":");const src=chartSrc(k);return src?`<div class="cb"><img src="${src}"/></div>`:`<div class="cb"><div class="np">${t} — not uploaded</div></div>`;}).join("")}
+  </div>
+  <div class="footer-prop">${prop}</div>
+  <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
+  <div class="pgn">${pg.v()}</div>
+</div>`;
   return out;
 })()}
 ${(()=>{
@@ -1750,7 +1759,7 @@ ${sec.financialCharts?`
 </div>`:""}
 
 ${sec.leasingSection?`
-<!-- PAGE 6: LEASING — stats + all 4 charts -->
+<!-- PAGE 6: LEASING — stats only -->
 <div class="page">
   <div class="pn">${inv}</div><div class="sh">Leasing — ${qtr}</div>
   <div class="lg">
@@ -1761,13 +1770,29 @@ ${sec.leasingSection?`
     <div class="lc"><div class="ll">Prospect Applications</div><div class="lv">${m.applications}</div></div>
     <div class="lc"><div class="ll">Total Delinquency</div><div class="lv">${fmtWhole(m.delinquency)}</div></div>
   </div>
+  <div class="footer-prop">${inv}</div><img src="${LOGO_SYMBOL}" class="footer-logo"/><div class="pgn">${pg.v()}</div>
+</div>
+<!-- PAGE 6b: LEASING CHARTS -->
+<div class="page">
+  <div class="pn">${inv}</div><div class="sh">Leasing Charts — ${qtr}</div>
   <div class="cg">
     ${C("inv_occupancy_rate","Occupancy Rate")}
     ${C("inv_occupancy_by_property","Occupancy Rate By Property")}
+  </div>
+  <div class="footer-prop">${inv}</div><img src="${LOGO_SYMBOL}" class="footer-logo"/><div class="pgn">${pg.v()}</div>
+</div>
+<!-- PAGE 6c: LEASING CHARTS (continued) -->
+<div class="page">
+  <div class="pn">${inv}</div><div class="sh">Leasing Charts (continued) — ${qtr}</div>
+  <div class="cg">
     ${C("inv_lease_expirations","Lease Expirations by Month")}
     ${C("inv_rent_growth","Rent Growth & Market Rent")}
   </div>
-  <div class="sh" style="margin-top:8px">Debt Service</div>
+  <div class="footer-prop">${inv}</div><img src="${LOGO_SYMBOL}" class="footer-logo"/><div class="pgn">${pg.v()}</div>
+</div>
+<!-- PAGE 6d: DEBT SERVICE -->
+<div class="page">
+  <div class="pn">${inv}</div><div class="sh">Debt Service — ${qtr}</div>
   <div class="cg">
     ${C("inv_noi_vs_debt_service","NOI vs. Debt Service")}
   </div>

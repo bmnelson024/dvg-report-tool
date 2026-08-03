@@ -1056,7 +1056,6 @@ body{font-family:Georgia,serif;background:var(--cream);color:var(--text);}
   </div>
 </div>
 ${(()=>{
-  const summaryOverflow = (n.income.length + n.expenses.length + n.capex.length + n.outlook.length) > 1000 || n.outlook.length > 500;
   const tbl=`<table class="st"><thead><tr><th>Metric</th><th>${prevLbl}</th><th>${qtr}</th><th>Q/Q Change</th></tr></thead><tbody>
     <tr><td>Average Occupancy</td><td>${prev.occupancy}%</td><td>${m.occupancy}%</td><td class="${m.occupancy>=prev.occupancy?"neg":"pos"}">${(m.occupancy-prev.occupancy>=0?"+":"")+(m.occupancy-prev.occupancy)+"%"}</td></tr>
     <tr><td>Total Income</td><td>${fmtWhole(prev.income)}</td><td>${fmtWhole(m.totalIncome)}</td><td class="${m.totalIncome>=prev.income?"neg":"pos"}">${pct(m.totalIncome,prev.income)}</td></tr>
@@ -1064,20 +1063,31 @@ ${(()=>{
     <tr><td>NOI</td><td>${fmtWhole(prev.noi)}</td><td>${fmtWhole(m.noi)}</td><td class="${m.noi>=prev.noi?"neg":"pos"}">${pct(m.noi,prev.noi)}</td></tr>
     <tr><td>Capex</td><td>${fmtWhole(prev.capex)}</td><td>${fmtWhole(m.capex)}</td><td class="${m.capex<=prev.capex?"neg":"pos"}">${pct(m.capex,prev.capex)}</td></tr>
   </tbody></table>`;
+  // Greedily bucket narrative sections onto page2 (with table) vs page2b (continued) by running
+  // character count, so any section that won't fit — not just Outlook — is deliberately moved to
+  // its own page rather than being squeezed and forced to jump mid-layout.
+  const _sections=[
+    {label:"Income &amp; Occupancy",text:n.income},
+    {label:"Expenses",text:n.expenses},
+    {label:"Capital Expenditures",text:n.capex},
+    {label:"Outlook",text:n.outlook}
+  ];
+  const MAX_PAGE2_CHARS=700; // leaves headroom for the summary table above
+  let _running=0, _splitAt=_sections.length;
+  for(let i=0;i<_sections.length;i++){_running+=_sections[i].text.length;if(_running>MAX_PAGE2_CHARS){_splitAt=i;break;}}
+  const _renderSec=s=>`<div class="ns"><div class="nl">${s.label}</div><p class="nt">${s.text}</p></div>`;
+  const page2Sections=_sections.slice(0,_splitAt), page2bSections=_sections.slice(_splitAt);
   const page2=`<div class="page">
   <div class="pn">${prop}</div><div class="sh">Summary</div>
   ${tbl}
-  <div class="ns"><div class="nl">Income &amp; Occupancy</div><p class="nt">${n.income}</p></div>
-  <div class="ns"><div class="nl">Expenses</div><p class="nt">${n.expenses}</p></div>
-  <div class="ns"><div class="nl">Capital Expenditures</div><p class="nt">${n.capex}</p></div>
-  ${!summaryOverflow?`<div class="ns"><div class="nl">Outlook</div><p class="nt">${n.outlook}</p></div>`:""}
+  ${page2Sections.map(_renderSec).join("")}
   <div class="footer-prop">${prop}</div>
   <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
 </div>`;
-  const page2b=summaryOverflow?`<div class="page">
+  const page2b=page2bSections.length?`<div class="page">
   <div class="pn">${prop}</div><div class="sh">Summary <span style="font-size:11px;font-weight:400;letter-spacing:1px;opacity:0.7">(continued)</span></div>
-  <div class="ns"><div class="nl">Outlook</div><p class="nt">${n.outlook}</p></div>
+  ${page2bSections.map(_renderSec).join("")}
   <div class="footer-prop">${prop}</div>
   <img src="${LOGO_SYMBOL}" alt="Dreamvesting" class="footer-logo"/>
   <div class="pgn">${pg.v()}</div>
@@ -1679,7 +1689,6 @@ function buildInvestmentReport(m,n,invName,quarter,loan,sections){
 
 <!-- PAGE 2: SUMMARY — narratives + QoQ comparison -->
 ${(()=>{
-  const summaryOverflow = (n.income.length + n.expenses.length + (n.capex||"").length + n.outlook.length) > 1200 || n.outlook.length > 500;
   const prevQtrLabel=(()=>{const pm=qtr.match(/[Qq]\s*([1-4])[\s\/\-]*(\d{4})/);if(!pm)return"Prior Quarter";const q=parseInt(pm[1]),y=parseInt(pm[2]);return q===1?`Q4 ${y-1}`:`Q${q-1} ${y}`;})();
   const tbl=`<table class="st"><thead><tr><th>Metric</th><th>${prevQtrLabel}</th><th>${qtr}</th><th>Change</th></tr></thead><tbody>
     <tr><td>Total Income</td><td>${prev?fmtWhole(prev.totalIncome):"—"}</td><td>${fmtWhole(m.totalIncome)}</td><td class="${prev&&m.totalIncome>=prev.totalIncome?"neg":"pos"}">${fmtChg(m.totalIncome,prev?.totalIncome??null)}</td></tr>
@@ -1688,20 +1697,31 @@ ${(()=>{
     <tr><td>Avg Physical Occupancy</td><td>${prev?prev.occupancy+"%":"—"}</td><td>${m.occupancy}%</td><td class="${prev&&m.occupancy>=prev.occupancy?"neg":"pos"}">${fmtOccChg(m.occupancy,prev?.occupancy??null)}</td></tr>
     <tr><td>Total Delinquency</td><td>${prev&&prev.delinquency!=null?fmtWhole(prev.delinquency):"—"}</td><td>${fmtWhole(m.delinquency)}</td><td class="${prev&&m.delinquency<=prev.delinquency?"neg":"pos"}">${prev?.delinquency!=null?fmtChg(m.delinquency,prev.delinquency):"—"}</td></tr>
   </tbody></table>`;
+  // Greedily bucket narrative sections onto page2 (with table) vs page2b (continued) by running
+  // character count, so any section that won't fit — not just Outlook — is deliberately moved to
+  // its own page rather than being squeezed and forced to jump mid-layout.
+  const _sections=[
+    {label:"Income &amp; Occupancy",text:n.income},
+    {label:"Expenses",text:n.expenses},
+    ...(n.capex?[{label:"Capital Expenditures",text:n.capex}]:[]),
+    {label:"Outlook",text:n.outlook}
+  ];
+  const MAX_PAGE2_CHARS=650; // leaves headroom for the summary table above
+  let _running=0, _splitAt=_sections.length;
+  for(let i=0;i<_sections.length;i++){_running+=_sections[i].text.length;if(_running>MAX_PAGE2_CHARS){_splitAt=i;break;}}
+  const _renderSec=s=>`<div class="ns"><div class="nl">${s.label}</div><p class="nt">${s.text}</p></div>`;
+  const page2Sections=_sections.slice(0,_splitAt), page2bSections=_sections.slice(_splitAt);
   const page2=`<div class="page">
   <div class="pn">${inv}</div><div class="sh">Summary — ${qtr}</div>
   ${tbl}
-  <div class="ns"><div class="nl">Income &amp; Occupancy</div><p class="nt">${n.income}</p></div>
-  <div class="ns"><div class="nl">Expenses</div><p class="nt">${n.expenses}</p></div>
-  ${n.capex?`<div class="ns"><div class="nl">Capital Expenditures</div><p class="nt">${n.capex}</p></div>`:""}
-  ${!summaryOverflow?`<div class="ns"><div class="nl">Outlook</div><p class="nt">${n.outlook}</p></div>`:""}
+  ${page2Sections.map(_renderSec).join("")}
   <div class="footer-prop">${inv}</div><img src="${LOGO_SYMBOL}" class="footer-logo"/><div class="pgn">${pg.v()}</div>
 </div>`;
-  const page2b=summaryOverflow?`
-<!-- PAGE 2b: SUMMARY CONTINUED — outlook -->
+  const page2b=page2bSections.length?`
+<!-- PAGE 2b: SUMMARY CONTINUED -->
 <div class="page">
   <div class="pn">${inv}</div><div class="sh">Summary — ${qtr} <span style="font-size:11px;font-weight:400;letter-spacing:1px;opacity:0.7">(continued)</span></div>
-  <div class="ns"><div class="nl">Outlook</div><p class="nt">${n.outlook}</p></div>
+  ${page2bSections.map(_renderSec).join("")}
   <div class="footer-prop">${inv}</div><img src="${LOGO_SYMBOL}" class="footer-logo"/><div class="pgn">${pg.v()}</div>
 </div>`:"";
   return page2+page2b;

@@ -375,8 +375,8 @@ function clearInvPrevMetrics(){
 }
 function saveProgress(){
   const isInv = state.source==='investment';
-  if(!isInv && !state.metrics && !state.prevMetrics){showError("Nothing to save yet — process your data files first.");return;}
-  // Investment saves are allowed at any step (even step 0 before processing)
+  // Saves are allowed at any step (even step 0, before processing/uploading files) —
+  // property name + quarter are the only real requirements.
   const propName = isInv ? (state.investmentName||"") : (state.propertyName||"");
   if(!propName){showError(isInv?"Set an Investment Name before saving.":"Set a Property Name before saving.");return;}
   if(!state.currentQuarter){showError("Set the Current Quarter before saving.");return;}
@@ -1836,12 +1836,12 @@ function renderInvestmentStep0(){
     if(p._imported && p.metrics) return true;
     if(!p.source) return false;
     // Mirror propCard's req logic exactly — unknown source → null → not ready
-    const req=['income','rr1','rr2','rr3','leasingSummary','renewalSummary','delinquency'];
+    const req=['income','rr1','rr2','rr3','leasingSummary','renewalSummary'];
     if(!req) return false;
     return req.every(k=>p.files[k]);
   });
   const propCard=(prop,idx)=>{
-    const req=['income','rr1','rr2','rr3','leasingSummary','renewalSummary','delinquency'];
+    const req=['income','rr1','rr2','rr3','leasingSummary','renewalSummary'];
     const uploadedCount=req.filter(k=>prop.files[k]).length;
     const allDone=(prop._imported&&prop.metrics)||( req.length>0&&req.every(k=>prop.files[k]));
     const months=getQMonths(q);
@@ -1892,7 +1892,7 @@ function renderInvestmentStep0(){
       
         ${invFileRow(prop.id,"leasingSummary","Leasing Summary","Quarter leasing summary",'text')}
         ${invFileRow(prop.id,"renewalSummary","Renewal Summary","Quarter renewal summary",'text')}
-        ${invFileRow(prop.id,"delinquency","Delinquency As Of","Current period",'text')}
+        ${invFileRow(prop.id,"delinquency","Delinquency As Of (optional)","Current period — skip if no delinquency",'text')}
       <div style="margin-top:10px"><div style="font-size:12px;font-weight:600;color:#1a1400;margin-bottom:6px">Economic Occupancy (optional)</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
           ${["m1","m2","m3"].map((k,i)=>`<div>
@@ -3135,7 +3135,7 @@ function render(){
       </div>
     </div>`).join("");
   const el=document.getElementById("step-content");
-  const requiredKeys=['income','rr1','rr2','rr3','leasingSummary','renewalSummary','delinquency'];
+  const requiredKeys=['income','rr1','rr2','rr3','leasingSummary','renewalSummary'];
   const missingKeys=requiredKeys.filter(k=>!state.files[k]);
   const allUploaded=missingKeys.length===0;
   const FILE_LABELS={income:'Income Statement',rr1:'Rent Roll (Month 1)',rr2:'Rent Roll (Month 2)',rr3:'Rent Roll (Month 3)',delinquency:'Delinquency As Of',leasingSummary:'Leasing Summary',renewalSummary:'Renewal Summary'};
@@ -3273,13 +3273,13 @@ function render(){
         ${chartRow("chart_loss_to_lease","Loss to Lease")}
         ${chartRow("chart_noi_vs_debt_service","NOI vs. Debt Service")}
       </div>`;
-      const afUploaded=Object.keys(state.files).filter(k=>["income","rr1","rr2","rr3","leasingSummary","renewalSummary","delinquency"].includes(k)&&state.files[k]).length;
+      const afUploaded=Object.keys(state.files).filter(k=>["income","rr1","rr2","rr3","leasingSummary","renewalSummary"].includes(k)&&state.files[k]).length;
       const _resumeNotice = (state.metrics && afUploaded===0) ? `
       <div style="background:#fef3cd;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:#92400e;">
         <strong>📂 Resuming saved report</strong> — Files are not stored between sessions. Please re-upload your AppFolio exports below before re-processing.
       </div>` : "";
       el.innerHTML = commonTop + _resumeNotice + `
-      <div class="section-label">AppFolio Reports <span style="margin-left:8px;background:#fdf8ec;color:#96771f;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">${afUploaded}/7 uploaded</span></div>
+      <div class="section-label">AppFolio Reports <span style="margin-left:8px;background:#fdf8ec;color:#96771f;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">${afUploaded}/6 uploaded</span></div>
       <div style="background:#fdf8ec;border:1px solid #e8d49a;border-radius:10px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px">
         <div>
           <div style="font-weight:600;font-size:13px;color:#1a1400;margin-bottom:3px">Bulk Upload All Reports</div>
@@ -3291,10 +3291,13 @@ function render(){
       ${rrSection}
       ${fileRow("leasingSummary","Leasing Summary","Leasing Summary report for the quarter",'text')}
       ${fileRow("renewalSummary","Renewal Summary","Renewal Summary report for the quarter",'text')}
-      ${fileRow("delinquency","Delinquency As Of","Delinquency As Of report — current period",'text')}
+      ${fileRow("delinquency","Delinquency As Of (optional)","Delinquency As Of report — current period. Skip if the property has no delinquency this quarter.",'text')}
       ${econBox}${chartsSection}
       ${!allUploaded?`<div style="background:#fef9ec;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-top:10px;font-size:12px;color:#92400e;"><strong>Still needed:</strong> ${missingKeys.map(k=>FILE_LABELS[k]||k).join(', ')}</div>`:''}
-      <button class="process-btn" ${allUploaded?"":"disabled"} onclick="processData()">Process Data →</button>`;
+      <div class="btn-row" style="margin-top:16px">
+        <button class="save-btn" onclick="saveProgress()">💾 Save</button>
+        <button class="process-btn" style="flex:2;margin:0" ${allUploaded?"":"disabled"} onclick="processData()">Process Data →</button>
+      </div>`;
   }
   else if(state.step===1 && state.metrics){
     const m=state.metrics;

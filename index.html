@@ -1659,7 +1659,7 @@ function buildInvestmentReport(m,n,invName,quarter,loan,sections){
 .pgn{position:absolute;bottom:24px;right:52px;font-family:sans-serif;font-size:10px;color:var(--muted);}
 .footer-logo{position:absolute;bottom:12px;right:100px;height:48px;width:auto;opacity:0.75;}
 .footer-prop{position:absolute;bottom:28px;left:52px;font-family:sans-serif;font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;}
-@media print{@page{margin:0;}*{-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{background:white;}.page{margin:0;box-shadow:none;page-break-after:always;break-after:page;}.page:last-child{page-break-after:auto;}img{box-shadow:none;}}
+@media print{@page{margin:0;}*{-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{background:white;}.page{margin:0;box-shadow:none;page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid;}.page:last-child{page-break-after:auto;break-after:auto;}.ns{page-break-inside:avoid;break-inside:avoid;}.cb{page-break-inside:avoid;break-inside:avoid;}img{box-shadow:none;}}
 </style></head><body>
 
 <!-- PAGE 1: COVER -->
@@ -1736,23 +1736,37 @@ ${(()=>{
 </div>
 
 ${sec.financialCharts?`
-<!-- PAGE 4: FINANCIAL CHARTS (4-up) -->
+<!-- PAGE 4: FINANCIAL CHARTS -->
 <div class="page">
   <div class="pn">${inv}</div><div class="sh">Financial Charts — ${qtr}</div>
   <div class="cg">
     ${C("inv_operating_income","Operating Income vs. Pro Forma")}
     ${C("inv_operating_expense","Operating Expense vs. Pro Forma")}
+  </div>
+  <div class="footer-prop">${inv}</div><img src="${LOGO_SYMBOL}" class="footer-logo"/><div class="pgn">${pg.v()}</div>
+</div>
+<!-- PAGE 4b: FINANCIAL CHARTS (by property) -->
+<div class="page">
+  <div class="pn">${inv}</div><div class="sh">Financial Charts (continued) — ${qtr}</div>
+  <div class="cg">
     ${C("inv_income_by_property","Operating Income By Property")}
     ${C("inv_expense_by_property","Operating Expense By Property")}
   </div>
   <div class="footer-prop">${inv}</div><img src="${LOGO_SYMBOL}" class="footer-logo"/><div class="pgn">${pg.v()}</div>
 </div>
-<!-- PAGE 5: FINANCIAL CHARTS (4-up) -->
+<!-- PAGE 5: FINANCIAL CHARTS -->
 <div class="page">
-  <div class="pn">${inv}</div><div class="sh">Financial Charts — ${qtr}</div>
+  <div class="pn">${inv}</div><div class="sh">Financial Charts (continued) — ${qtr}</div>
   <div class="cg">
     ${C("inv_income_vs_expense","Operating Income vs. Operating Expense")}
     ${C("inv_noi","NOI vs. Pro Forma")}
+  </div>
+  <div class="footer-prop">${inv}</div><img src="${LOGO_SYMBOL}" class="footer-logo"/><div class="pgn">${pg.v()}</div>
+</div>
+<!-- PAGE 5b: FINANCIAL CHARTS (NOI by property) -->
+<div class="page">
+  <div class="pn">${inv}</div><div class="sh">Financial Charts (continued) — ${qtr}</div>
+  <div class="cg">
     ${C("inv_noi_by_property","NOI By Property")}
   </div>
   <div class="footer-prop">${inv}</div><img src="${LOGO_SYMBOL}" class="footer-logo"/><div class="pgn">${pg.v()}</div>

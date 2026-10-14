@@ -61,6 +61,8 @@
   .kpi-card { background: white; border: 1px solid #e8d49a; border-radius: 8px; padding: 10px 14px; }
   .kpi-label { font-size: 11px; color: #7a6420; font-weight: 600; text-transform: uppercase; }
   .kpi-value { font-size: 18px; font-weight: 700; color: #1a1400; margin-top: 4px; }
+  .chg-good { color:#16a34a; font-weight:600; }
+  .chg-bad { color:#dc2626; font-weight:600; }
   .capex-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #e8d49a; font-size: 13px; }
   .btn-row { display: flex; gap: 10px; margin-top: 8px; }
   .btn-back { flex: 1; padding: 10px 0; border-radius: 8px; border: 1px solid #e8d49a; background: white; font-weight: 600; cursor: pointer; font-family: Inter, sans-serif; font-size: 14px; }
@@ -111,7 +113,7 @@
   <div style="margin-bottom:20px">
     <div style="display:flex;align-items:center;justify-content:space-between">
       <h1 style="display:flex;align-items:center;gap:12px;"><img id="lw-header-logo" style="height:40px;width:auto;" alt=""/><span>Quarterly Report Builder</span></h1>
-      <button onclick="if(confirm('Clear all saved data and start completely fresh?')){indexedDB.deleteDatabase('dreamvesting_db');indexedDB.deleteDatabase('leavenwealth_db');localStorage.clear();alert('Done! Click OK and the page will reload.');location.reload();}" style="background:white;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap">🗑 Clear All Data</button>
+      <button onclick="if(confirm('Clear all saved data and start completely fresh?')){clearDvData();alert('Done! Click OK and the page will reload.');location.reload();}" style="background:white;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap">🗑 Clear All Data</button>
     </div>
     <div class="subtitle">Quarterly Report Tool</div>
   </div>
@@ -157,7 +159,9 @@ const LOGO_SYMBOL = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
 // this file or repo is ever made public.
 const DV_NARRATIVE_FN_URL = "https://beoquaazkkxjisxnmrmg.supabase.co/functions/v1/rapid-task";
 const DV_NARRATIVE_SECRET = "L-qzg7staHlOKoDBS2578q4EGW463MsFJcsheZYNp8Y";
-const PREV_SAFE = { occupancy:0, income:0, expenses:0, noi:0, capex:0, expenseCategories:[] };
+// occKnown: prior-quarter occupancy is only meaningful when it was actually entered/loaded
+const occKnown = p => !!(p && p.occupancy!=null && p.occupancy>0);
+const PREV_SAFE = { occupancy:null, income:0, expenses:0, noi:0, capex:0, expenseCategories:[] };
 const STEPS = ["Upload Data", "Review Metrics", "Generate Report"];
 const SAVES_INDEX_KEY = "dv_saves_index";
 const SAVE_PREFIX = "dv_save_";
@@ -170,15 +174,17 @@ const INV_FILES_PREFIX = "dv_invfiles_";
 // Writes update the cache immediately and persist to IndexedDB asynchronously.
 // Falls back silently if IndexedDB is unavailable.
 let _idb = null;
+let _cacheLoaded = false; // true once saved data is in memory (or IDB definitively unavailable)
 const _dbCache = {};
 
 function idbInit(cb){
   let called=false;
   function done(){if(!called){called=true;cb();}}
+  function fail(){_cacheLoaded=true;done();}
   // Safety net: if IDB hangs for any reason, render anyway after 2s
   setTimeout(done,2000);
   try{
-    if(!window.indexedDB){done();return;}
+    if(!window.indexedDB){fail();return;}
     const req=indexedDB.open('dreamvesting_db',1);
     req.onupgradeneeded=e=>{
       try{e.target.result.createObjectStore('items');}catch(e2){}
@@ -193,23 +199,35 @@ function idbInit(cb){
         let keys=null, vals=null;
         keysReq.onsuccess=()=>{keys=keysReq.result; if(vals!==null) build();};
         valsReq.onsuccess=()=>{vals=valsReq.result; if(keys!==null) build();};
-        keysReq.onerror=()=>done();
-        valsReq.onerror=()=>done();
-        function build(){try{keys.forEach((k,i)=>{_dbCache[k]=vals[i];});}catch(e3){}done();}
-        tx.onerror=()=>done();
-        tx.onabort=()=>done();
-      }catch(e2){done();}
+        keysReq.onerror=()=>fail();
+        valsReq.onerror=()=>fail();
+        function build(){
+          try{keys.forEach((k,i)=>{_dbCache[k]=vals[i];});}catch(e3){}
+          _cacheLoaded=true;
+          if(!called){done();return;}
+          // Data arrived after the 2s safety net already rendered: show saved reports if still on the start screen
+          try{if(!state.source&&state.step===0&&!state.showHome&&getSavesIndex().length>0){state.showHome=true;render();}}catch(e4){}
+        }
+        tx.onerror=()=>fail();
+        tx.onabort=()=>fail();
+      }catch(e2){fail();}
     };
-    req.onerror=()=>done();
-    req.onblocked=()=>done();
-  }catch(e){done();}
+    req.onerror=()=>fail();
+    req.onblocked=()=>fail();
+  }catch(e){fail();}
 }
 
 function dbGet(k){return Object.prototype.hasOwnProperty.call(_dbCache,k)?_dbCache[k]:null;}
 function dbSet(k,v){
   _dbCache[k]=v;
   if(!_idb)return;
-  try{const req=_idb.transaction('items','readwrite').objectStore('items').put(v,k);req.onerror=()=>console.warn('IDB write failed for key:',k,req.error);}catch(e){console.warn('IDB write exception for key:',k,e);}
+  const fail=err=>{console.warn('IDB write failed for key:',k,err);showError("Save failed: the browser could not store your data"+(err&&err.name==="QuotaExceededError"?" because storage is full":"")+". Download a backup, delete old reports, and try again.");};
+  try{
+    const tx=_idb.transaction('items','readwrite');
+    tx.objectStore('items').put(v,k);
+    let reported=false;
+    tx.onabort=()=>{if(!reported){reported=true;fail(tx.error);}};
+  }catch(e){fail(e);}
 }
 function dbRemove(k){
   delete _dbCache[k];
@@ -228,6 +246,14 @@ function migrateLegacyData(){
     toMigrate.forEach(k=>localStorage.removeItem(k));
     console.log('Dreamvesting: migrated '+toMigrate.length+' items localStorage → IndexedDB');
   }catch(e){}
+}
+
+// Clears ONLY Dreamvesting data. The Leavenwealth tool shares this browser origin,
+// so never call localStorage.clear() or touch leavenwealth_db here.
+function clearDvData(){
+  try{if(_idb){_idb.close();_idb=null;}}catch(e){}
+  try{indexedDB.deleteDatabase('dreamvesting_db');}catch(e){}
+  try{const ks=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('dv_'))ks.push(k);}ks.forEach(k=>localStorage.removeItem(k));}catch(e){}
 }
 
 function downloadBackup(){
@@ -374,6 +400,7 @@ function clearInvPrevMetrics(){
   render();
 }
 function saveProgress(){
+  if(!_cacheLoaded){showError("Saved reports are still loading. Wait a few seconds and click Save again.");return;}
   const isInv = state.source==='investment';
   // Saves are allowed at any step (even step 0, before processing/uploading files) —
   // property name + quarter are the only real requirements.
@@ -461,7 +488,7 @@ function loadSave(key){
       invSections:data.invSections||{loanPrincipal:true,writeoffs:true,financialCharts:true,leasingSection:true},
       invReportHTML:null,
       // Reset transient UI flags — these are never saved and must not bleed across sessions
-      _showInvPrevPicker:false, _invPrevSource:null
+      _showInvPrevPicker:false, _invPrevSource:null, _savedThisStep:true
     };
     // Restore investment property files (saved separately, like charts)
     applyInvFiles(state.invProperties, loadInvFilesForKey(key));
@@ -619,7 +646,7 @@ function renderHome(){
     <div style="margin-top:16px;display:flex;gap:10px">
       <button class="btn-home" onclick="downloadBackup()" style="font-size:12px">⬇ Download Backup</button>
       <button class="btn-home" onclick="restoreBackup()" style="font-size:12px">⬆ Restore Backup</button>
-      <button class="btn-home" onclick="if(confirm('Delete ALL saved reports and clear all data? This cannot be undone.')){indexedDB.deleteDatabase('dreamvesting_db');localStorage.clear();showToast('✓ All data cleared — reloading...');setTimeout(()=>location.reload(),1200);}" style="font-size:12px;color:#dc2626;border-color:#fca5a5">🗑 Clear All Data</button>
+      <button class="btn-home" onclick="if(confirm('Delete ALL saved reports and clear all data? This cannot be undone.')){clearDvData();showToast('✓ All data cleared — reloading...');setTimeout(()=>location.reload(),1200);}" style="font-size:12px;color:#dc2626;border-color:#fca5a5">🗑 Clear All Data</button>
     </div>`;
 }
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -694,21 +721,6 @@ const parseDelim = text => {
   return lines.slice(1).map(line=>Object.fromEntries(headers.map((h,i)=>[h,(split(line)[i]||"").trim().replace(/^"|"$/g,"")])));
 };
 
-// getVacantFlag: returns true if the row indicates a vacant unit.
-const getVacantFlag = r => {
-  const status = (r["Status"] || r["Residents"] || r["Resident Status"] || r["Tenant Status"] || "").toUpperCase();
-  if (status.includes("VACANT") || status.includes("VACANCY")) return true;
-  if (status === "NOTICE-UNRENTED") return true;
-  // Buildium: a row with no resident name and a non-"occupied" status is vacant
-  const name = (r["Resident Name"] || r["Resident"] || r["Residents"] || "").trim();
-  const st   = (r["Status"] || "").trim();
-  if (!name && st && !/occup/i.test(st)) return true;
-  // Buildium rent roll: "Tenants" column — empty Tenants on a unit row = vacant
-  const tenants = (r["Tenants"] || "").trim();
-  const unitId  = (r["Unit"] || r["unit"] || "").trim();
-  if (!tenants && !name && unitId && /\d/.test(unitId)) return true;
-  return false;
-};
 
 
 
@@ -835,14 +847,23 @@ const genNarratives = m => {
   const incChg=Math.abs(prev.income)>0?((m.totalIncome-prev.income)/Math.abs(prev.income))*100:null;
   const expChg=Math.abs(prev.expenses)>0?((m.totalExpense-prev.expenses)/Math.abs(prev.expenses))*100:null;
   const capChg=Math.abs(prev.capex)>0?((m.capex-prev.capex)/Math.abs(prev.capex))*100:null;
-  const occChg=m.occupancy-prev.occupancy;
+  const occChg=occKnown(prev)?m.occupancy-prev.occupancy:null;
+  const occSentence=occChg===null
+    ? `Average physical occupancy was ${m.occupancy}% for the quarter.`
+    : occChg===0
+      ? `Average physical occupancy held steady at ${m.occupancy}%, reflecting stable demand at the property.`
+      : `Average physical occupancy ${occChg>0?"improved to":"declined slightly to"} ${m.occupancy}%, compared to ${prev.occupancy}% in the prior quarter${occChg>0?", reflecting improved leasing momentum during the quarter":""}.`;
+  // Outlook season line keyed to the NEXT quarter, so the wording fits whenever the report is run
+  const _nq=nextQtr(state.currentQuarter||"");
+  const _nqNum=(_nq.match(/Q([1-4])/)||[])[1];
+  const seasonLine={"1":"heads into the winter months, typically the slowest period for leasing, with the spring season to follow","2":"enters the spring leasing season, historically the strongest period for new lease signings","3":"enters the peak summer leasing months","4":"heads into the fall, when leasing activity typically slows ahead of winter"}[_nqNum]||"";
   const delinqPct=(m.monthlyRent>0 && m.delinquency!=null)?(m.delinquency/m.monthlyRent)*100:null;
   if(m.monthlyRent===0) showError("Warning: Total monthly rent resolved to $0 — delinquency narrative may be inaccurate. Verify the rent roll data parsed correctly.");
   const delinqGood=delinqPct!==null&&delinqPct<=3;
   return {
     income: incChg!==null
-      ? `Total income for ${state.currentQuarter||""} ${incChg>=0?"increased":"decreased"} ${Math.abs(incChg).toFixed(0)}% quarter over quarter, ${incChg>=0?"rising":"declining"} from ${fmtWhole(prev.income)} in the prior quarter to ${fmtWhole(m.totalIncome)}. Average physical occupancy ${occChg===0?"held steady at":occChg>0?"improved to":"declined slightly to"} ${m.occupancy}%${occChg!==0?`, compared to ${prev.occupancy}% in the prior quarter`:""},${" "}reflecting ${occChg<0?"typical seasonal softness heading into the winter months":occChg>0?"improving leasing momentum entering the spring season":"stable demand at the property"}. Leasing activity remained active with ${m.newLeases} new leases and ${m.renewals} renewals signed during the quarter.`
-      : `Total income for ${state.currentQuarter||""} was ${fmtWhole(m.totalIncome)}. Average physical occupancy ${occChg===0?"held steady at":occChg>0?"improved to":"declined slightly to"} ${m.occupancy}%, reflecting ${occChg<0?"typical seasonal softness":"stable demand"} at the property. Leasing activity remained active with ${m.newLeases} new leases and ${m.renewals} renewals signed during the quarter.`,
+      ? `Total income for ${state.currentQuarter||""} ${incChg>=0?"increased":"decreased"} ${Math.abs(incChg).toFixed(0)}% quarter over quarter, ${incChg>=0?"rising":"declining"} from ${fmtWhole(prev.income)} in the prior quarter to ${fmtWhole(m.totalIncome)}. ${occSentence} Leasing activity remained active with ${m.newLeases} new leases and ${m.renewals} renewals signed during the quarter.`
+      : `Total income for ${state.currentQuarter||""} was ${fmtWhole(m.totalIncome)}. ${occSentence} Leasing activity remained active with ${m.newLeases} new leases and ${m.renewals} renewals signed during the quarter.`,
     expenses: (()=>{
       const base=expChg!==null
         ? `Operating expenses ${expChg>=0?"increased":"decreased"} ${Math.abs(expChg).toFixed(0)}% quarter over quarter, ${expChg>=0?"rising":"declining"} from ${fmtWhole(prev.expenses)} in the prior quarter to ${fmtWhole(m.totalExpense)} in ${state.currentQuarter||""}.`
@@ -887,7 +908,7 @@ const genNarratives = m => {
         driverText=` ${parts.length>1?parts.slice(0,-1).join(", ")+" and "+parts[parts.length-1]:parts[0]} represented the most significant expense categories during the period.`;
       } else {
         // Fallback to generic text when no category data available
-        driverText=expChg>5?" The increase was driven primarily by seasonal utility costs and routine maintenance activity as the property entered the colder winter months.":expChg<-5?" The reduction reflects normalized operating conditions following elevated costs in the prior quarter.":" Expenses remained largely stable quarter over quarter, reflecting consistent operational management across the portfolio.";
+        driverText=expChg>5?" The increase reflects higher routine operating costs during the quarter.":expChg<-5?" The reduction reflects normalized operating conditions following elevated costs in the prior quarter.":" Expenses remained largely stable quarter over quarter, reflecting consistent operational management across the portfolio.";
       }
       return base+driverText;
     })(),
@@ -915,7 +936,7 @@ const genNarratives = m => {
         ? `Capital expenditures ${capChg>=0?"increased":"decreased"} ${Math.abs(capChg).toFixed(0)}% quarter over quarter to ${fmtWhole(m.capex)}, ${capChg<0?"reflecting a gradual tapering of major project spend as capital initiatives from prior quarters near completion":"reflecting continued investment in property improvements and unit upgrades"}. ${keyInvest}${remodelSentence}`
         : `Capital expenditures totaled ${fmtWhole(m.capex)} for ${state.currentQuarter||""}. ${keyInvest}${remodelSentence}`;
     })(),
-    outlook: `${state.propertyName||"Property"} enters ${nextQtr(state.currentQuarter||"")} with ${m.occupancy>=90?"strong":"stable"} momentum — occupancy stands at ${m.occupancy}% and the spring leasing season is underway, historically the strongest period for new lease signings. ${delinqGood?"Delinquency stands at "+fmtWhole(m.delinquency)+" ("+delinqPct.toFixed(1)+"% of monthly rent collections) and remains well-controlled, reflecting effective property management practices.":"Management continues to actively address delinquency through consistent follow-up and lease enforcement protocols."} With capital spending ${capChg<0?"moderating":"continuing at a measured pace"} and leasing activity strengthening, we expect improved NOI performance and continued cash flow stability in the quarters ahead.`
+    outlook: `${state.propertyName||"Property"} enters ${nextQtr(state.currentQuarter||"")} with ${m.occupancy>=90?"strong":"stable"} momentum. Occupancy stands at ${m.occupancy}%${seasonLine?", and the property "+seasonLine:""}. ${delinqGood?"Delinquency stands at "+fmtWhole(m.delinquency)+" ("+delinqPct.toFixed(1)+"% of monthly rent collections) and remains well-controlled, reflecting effective property management practices.":"Management continues to actively address delinquency through consistent follow-up and lease enforcement protocols."} With capital spending ${capChg<0?"moderating":"continuing at a measured pace"} and steady leasing activity, we expect continued NOI performance and cash flow stability in the quarters ahead.`
   };
 };
 // ─── REPORT HTML ─────────────────────────────────────────────────────────────
@@ -1040,6 +1061,7 @@ body{font-family:Georgia,serif;background:var(--cream);color:var(--text);}
   .page{margin:0;box-shadow:none;page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid;}
   .page:last-child{page-break-after:auto;break-after:auto;}
   .page-data{margin:0;box-shadow:none;padding:40px 60px 90px;page-break-after:always;break-after:page;}
+  .ns{page-break-inside:avoid;break-inside:avoid;}
   img{box-shadow:none;}
 }
 </style></head><body>
@@ -1057,7 +1079,7 @@ body{font-family:Georgia,serif;background:var(--cream);color:var(--text);}
 </div>
 ${(()=>{
   const tbl=`<table class="st"><thead><tr><th>Metric</th><th>${prevLbl}</th><th>${qtr}</th><th>Q/Q Change</th></tr></thead><tbody>
-    <tr><td>Average Occupancy</td><td>${prev.occupancy}%</td><td>${m.occupancy}%</td><td class="${m.occupancy>=prev.occupancy?"neg":"pos"}">${(m.occupancy-prev.occupancy>=0?"+":"")+(m.occupancy-prev.occupancy)+"%"}</td></tr>
+    <tr><td>Average Occupancy</td><td>${occKnown(prev)?prev.occupancy+"%":"—"}</td><td>${m.occupancy}%</td>${occKnown(prev)?`<td class="${m.occupancy>=prev.occupancy?"neg":"pos"}">${(m.occupancy-prev.occupancy>=0?"+":"")+(m.occupancy-prev.occupancy)+"%"}</td>`:`<td>—</td>`}</tr>
     <tr><td>Total Income</td><td>${fmtWhole(prev.income)}</td><td>${fmtWhole(m.totalIncome)}</td><td class="${m.totalIncome>=prev.income?"neg":"pos"}">${pct(m.totalIncome,prev.income)}</td></tr>
     <tr><td>Operating Expenses</td><td>${fmtWhole(prev.expenses)}</td><td>${fmtWhole(m.totalExpense)}</td><td class="${m.totalExpense<=prev.expenses?"neg":"pos"}">${pct(m.totalExpense,prev.expenses)}</td></tr>
     <tr><td>NOI</td><td>${fmtWhole(prev.noi)}</td><td>${fmtWhole(m.noi)}</td><td class="${m.noi>=prev.noi?"neg":"pos"}">${pct(m.noi,prev.noi)}</td></tr>
@@ -1096,7 +1118,7 @@ ${(()=>{
 })()}
 <div class="page">
   <div class="pn">${prop}</div><div class="sh">Asset Overview</div>
-  ${(()=>{const af=state.assetFacts||{};const dash="—";return'<div class="af"><h3>Asset Facts</h3><div class="ag">'+'<div><div class="al">Units</div><div class="av">'+(af.units||"—")+'</div></div>'+'<div><div class="al">Square Footage</div><div class="av">'+(af.sqft||dash)+'</div></div>'+'<div><div class="al">Purchased</div><div class="av">'+(af.purchased||dash)+'</div></div>'+'<div><div class="al">Year Built</div><div class="av">'+(af.yearBuilt||dash)+'</div></div>'+'<div><div class="al">Address</div><div class="av">'+(af.address||dash)+'</div></div>'+'<div><div class="al">City / State</div><div class="av">'+(af.cityState||dash)+'</div></div>'+'</div></div>';})()}
+  ${(()=>{const af=assetFacts||state.assetFacts||{};const dash="—";return'<div class="af"><h3>Asset Facts</h3><div class="ag">'+'<div><div class="al">Units</div><div class="av">'+(af.units||"—")+'</div></div>'+'<div><div class="al">Square Footage</div><div class="av">'+(af.sqft||dash)+'</div></div>'+'<div><div class="al">Purchased</div><div class="av">'+(af.purchased||dash)+'</div></div>'+'<div><div class="al">Year Built</div><div class="av">'+(af.yearBuilt||dash)+'</div></div>'+'<div><div class="al">Address</div><div class="av">'+(af.address||dash)+'</div></div>'+'<div><div class="al">City / State</div><div class="av">'+(af.cityState||dash)+'</div></div>'+'</div></div>';})()}
   <div class="sh">Snapshot — ${qtr}</div>
   <div class="sg">
     <div class="sc hl"><div class="sl">Total Income</div><div class="sv">${fmtWhole(m.totalIncome)}</div></div>
@@ -1402,7 +1424,7 @@ function loadInvPropertyFile(propId,key,asBuffer){
     const isXL=["xlsx","xls"].includes(f.name.split(".").pop().toLowerCase());
     if(asBuffer==='text' && isXL){
       const r=new FileReader();
-      r.onload=ev=>{const prop=state.invProperties.find(p=>p.id===propId);if(prop){prop.files[key]=xlsxToText(ev.target.result);render();}};
+      r.onload=ev=>{const buf=ev.target.result;ensureXLSX(()=>{const prop=state.invProperties.find(p=>p.id===propId);if(!prop)return;const txt=xlsxToText(buf);if(!txt||!txt.trim()){showError("Could not convert "+f.name+" from Excel. Export it as CSV from AppFolio and upload that instead.");return;}prop.files[key]=txt;render();});};
       r.readAsArrayBuffer(f);
     } else {
       const useBuffer=asBuffer==='auto'?isXL:asBuffer;
@@ -1450,7 +1472,7 @@ function parsePropertyMetrics(prop){
   };
   occ1=calcOccAF(prop.files.rr1); occ2=calcOccAF(prop.files.rr2); occ3=calcOccAF(prop.files.rr3);
   const fr=parseDelim(prop.files.rr3||"").filter(r=>{const u=(r["Unit"]||"").trim();if(/^\d+\s*units?$/i.test(u)||/^total/i.test(u)||/^->/.test(u)||u.length>=50)return false;return u||(r["BD/BA"]||r["Status"]||r["Tenant"]||"").trim();});
-  fr.forEach(r=>{const st=(r["Status"]||"").toUpperCase();if(!getVacantFlag(r)&&st!=="NOTICE-UNRENTED"){mkt+=parseCur(r["Market Rent"]||r["MarketRent"]||r["Mkt Rent"]||0);act+=parseCur(r["Rent"]||0);}});
+  fr.forEach(r=>{const st=(r["Status"]||"").toUpperCase();if(!st.includes("VACANT")&&st!=="NOTICE-UNRENTED"){mkt+=parseCur(r["Market Rent"]||r["MarketRent"]||r["Mkt Rent"]||0);act+=parseCur(r["Rent"]||0);}});
   const dr=parseDelim(prop.files.delinquency||"");
   const dt=dr.find(r=>/^total$/i.test((r["Unit"]||r["Name"]||"").trim()));
   if(dt){delinquency=parseCur(dt["Amount Receivable"]||0);}else{dr.forEach(r=>{const a=parseCur(r["Amount Receivable"]||0);if(a>0)delinquency+=a;});}
@@ -1515,8 +1537,12 @@ function processInvestmentData(){
     const occupancy=totalUnitsPortfolio>0
       ? Math.round(results.reduce((s,m)=>s+(m.occupancy*(m.unitCount||0)),0)/totalUnitsPortfolio)
       : (results.length>0?Math.round(results.reduce((s,m)=>s+m.occupancy,0)/results.length):0);
-    const econOccs=results.filter(m=>m.avgEconOcc).map(m=>parseFloat(m.avgEconOcc));
-    const avgEconOcc=econOccs.length>0?Math.round(econOccs.reduce((s,v)=>s+v,0)/econOccs.length).toString():null;
+    // Unit-weighted economic occupancy (falls back to a simple average if any property lacks a unit count)
+    const econProps=results.filter(m=>m.avgEconOcc);
+    const econUnits=econProps.reduce((s,m)=>s+(m.unitCount||0),0);
+    const avgEconOcc=econProps.length===0?null:(econUnits>0&&econProps.every(m=>m.unitCount)
+      ? Math.round(econProps.reduce((s,m)=>s+parseFloat(m.avgEconOcc)*m.unitCount,0)/econUnits)
+      : Math.round(econProps.reduce((s,m)=>s+parseFloat(m.avgEconOcc),0)/econProps.length)).toString();
     state.invMetrics={totalIncome,totalExpense,noi,delinquency,newLeases,renewals,inquiries,applications,lossToLease,occupancy,avgEconOcc,propertyCount:results.length,totalUnits:totalUnitsPortfolio,propertyMetrics:results};
     state.invNarratives=genInvestmentNarratives(state.invMetrics);
     state.step=1; state._savedThisStep=false; render();
@@ -1609,7 +1635,7 @@ function buildInvestmentReport(m,n,invName,quarter,loan,sections){
   const writeoffs=loan.writeoffs?`$${parseFloat((loan.writeoffs||"0").replace(/[$,]/g,"")).toLocaleString("en-US")}`:"—";
   const prev=state.invPrevMetrics;
   const fmtChg=(c,p)=>(p!=null&&Math.abs(p)>0)?((c-p)/Math.abs(p)*100>=0?"+":"")+((c-p)/Math.abs(p)*100).toFixed(0)+"%":"—";
-  const fmtOccChg=(c,p)=>p!=null?(c-p>=0?"+":"")+(c-p)+"%":"—";
+  const fmtOccChg=(c,p)=>p?(c-p>=0?"+":"")+(c-p)+"%":"—";
   const C=(k,t)=>{const s=state.invCharts[k];return`<div class="cb"><div class="ct">${t}</div>${s?`<img src="${s}" alt="${t}" style="width:100%;height:auto;display:block;"/>`:`<div class="np">Chart not uploaded</div>`}</div>`;};
   const propNames=state.invProperties.map(p=>p.name).filter(Boolean).join(" · ");
   const propPhotos=state.invProperties.filter(p=>p.name).map(p=>({name:p.name,photo:loadPhotoForProperty(p.name)})).filter(p=>p.photo);
@@ -1618,7 +1644,7 @@ function buildInvestmentReport(m,n,invName,quarter,loan,sections){
   const thumbH=Math.round(thumbW*0.65);
   const photoStrip=n_photos>0?`<div style="margin-top:36px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap;max-width:660px">
     ${propPhotos.map(p=>`<div style="text-align:center;flex-shrink:0">
-      <img src="${p.photo}" style="width:${thumbW}px;height:${thumbH}px;object-fit:cover;border-radius:8px;border:2px solid rgba(0,196,140,0.4);display:block"/>
+      <img src="${p.photo}" style="width:${thumbW}px;height:${thumbH}px;object-fit:cover;border-radius:8px;border:2px solid rgba(184,148,42,0.5);display:block"/>
       <div style="font-size:9px;color:rgba(255,255,255,0.55);margin-top:6px;font-family:sans-serif;letter-spacing:1.5px;text-transform:uppercase;max-width:${thumbW}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
     </div>`).join("")}
   </div>`:"";
@@ -1694,7 +1720,7 @@ ${(()=>{
     <tr><td>Total Income</td><td>${prev?fmtWhole(prev.totalIncome):"—"}</td><td>${fmtWhole(m.totalIncome)}</td><td class="${prev&&m.totalIncome>=prev.totalIncome?"neg":"pos"}">${fmtChg(m.totalIncome,prev?.totalIncome??null)}</td></tr>
     <tr><td>Total Expenses</td><td>${prev?fmtWhole(prev.totalExpense):"—"}</td><td>${fmtWhole(m.totalExpense)}</td><td class="${prev&&m.totalExpense<=prev.totalExpense?"neg":"pos"}">${fmtChg(m.totalExpense,prev?.totalExpense??null)}</td></tr>
     <tr><td>Net Operating Income</td><td>${prev?fmtWhole(prev.noi):"—"}</td><td>${fmtWhole(m.noi)}</td><td class="${prev&&m.noi>=prev.noi?"neg":"pos"}">${fmtChg(m.noi,prev?.noi??null)}</td></tr>
-    <tr><td>Avg Physical Occupancy</td><td>${prev?prev.occupancy+"%":"—"}</td><td>${m.occupancy}%</td><td class="${prev&&m.occupancy>=prev.occupancy?"neg":"pos"}">${fmtOccChg(m.occupancy,prev?.occupancy??null)}</td></tr>
+    <tr><td>Avg Physical Occupancy</td><td>${prev&&prev.occupancy?prev.occupancy+"%":"—"}</td><td>${m.occupancy}%</td><td class="${prev&&prev.occupancy?(m.occupancy>=prev.occupancy?"neg":"pos"):""}">${fmtOccChg(m.occupancy,prev?.occupancy??null)}</td></tr>
     <tr><td>Total Delinquency</td><td>${prev&&prev.delinquency!=null?fmtWhole(prev.delinquency):"—"}</td><td>${fmtWhole(m.delinquency)}</td><td class="${prev&&m.delinquency<=prev.delinquency?"neg":"pos"}">${prev?.delinquency!=null?fmtChg(m.delinquency,prev.delinquency):"—"}</td></tr>
   </tbody></table>`;
   // Greedily bucket narrative sections onto page2 (with table) vs page2b (continued) by running
@@ -1797,7 +1823,7 @@ ${sec.leasingSection?`
 <div class="page">
   <div class="pn">${inv}</div><div class="sh">Leasing — ${qtr}</div>
   <div class="lg">
-    <div class="lc"><div class="ll">Loss to Lease (Weighted)</div><div class="lv">${fmtWhole(m.lossToLease)}</div></div>
+    <div class="lc"><div class="ll">Total Loss to Lease</div><div class="lv">${fmtWhole(m.lossToLease)}</div></div>
     <div class="lc"><div class="ll">New Leases</div><div class="lv">${m.newLeases}</div></div>
     <div class="lc"><div class="ll">Lease Renewals</div><div class="lv">${m.renewals}</div></div>
     <div class="lc"><div class="ll">Prospect Inquiries</div><div class="lv">${m.inquiries}</div></div>
@@ -2092,7 +2118,7 @@ function processDataAppFolio() {
     };
     const _missingFiles = Object.entries(_requiredForProcess).filter(([k])=>!state.files[k]).map(([,label])=>label);
     if(_missingFiles.length){
-      showError("Please re-upload the following files before processing (files are not stored between sessions): " + _missingFiles.join(", ") + ".");
+      showError("Please upload the following files before processing: " + _missingFiles.join(", ") + ".");
       return;
     }
 
@@ -2270,13 +2296,13 @@ function processDataAppFolio() {
     const parsedPrev = parsePriorQuarterFromExcel(state.files.income, state.currentQuarter||"");
     if(parsedPrev){
       const rawPrevOcc = state.prevOccupancyInput ? state.prevOccupancyInput.replace(/[^0-9.]/g,"") : "";
-      const prevOcc = rawPrevOcc ? Math.round(parseFloat(rawPrevOcc)) : 0;
+      const prevOcc = rawPrevOcc ? Math.round(parseFloat(rawPrevOcc)) : null;
       if(state.prevOccupancyInput && !rawPrevOcc) showError("Warning: Prior occupancy value \""+state.prevOccupancyInput+"\" is not a valid number. Defaulting to 0%.");
       state.prevMetrics = {occupancy:prevOcc, income:parsedPrev.income, expenses:parsedPrev.expenses, noi:parsedPrev.noi, capex:parsedPrev.capex, expenseCategories:parsedPrev.expenseCategories||[]};
       state.prevQuarterLabel = parsedPrev.prevLabel;
     } else if(state.prevOccupancyInput || state.prevMetrics) {
       const rawPrevOcc = state.prevOccupancyInput ? state.prevOccupancyInput.replace(/[^0-9.]/g,"") : "";
-      const prevOccBu2 = rawPrevOcc ? Math.round(parseFloat(rawPrevOcc)) : (state.prevMetrics ? state.prevMetrics.occupancy : 0);
+      const prevOccBu2 = rawPrevOcc ? Math.round(parseFloat(rawPrevOcc)) : (state.prevMetrics ? state.prevMetrics.occupancy : null);
       if(state.prevMetrics) state.prevMetrics.occupancy = prevOccBu2;
       else if(prevOccBu2) state.prevMetrics = {occupancy:prevOccBu2, income:0, expenses:0, noi:0, capex:0};
     }
@@ -2416,14 +2442,21 @@ function loadAllRentRolls(){
     let pending=Math.min(rrFiles.length,3);
     if(!pending){showError("No files selected.");return;}
     rrFiles.slice(0,3).forEach((f,i)=>{
-      const r=new FileReader();
-      r.onload=ev=>{
-        state.files[keys[i]]=ev.target.result;
-        tryAutoFillPropertyName(ev.target.result);
+      const isXL=["xlsx","xls"].includes(f.name.split(".").pop().toLowerCase());
+      const finish=txt=>{
+        state.files[keys[i]]=txt;
+        tryAutoFillPropertyName(txt);
         pending--;
-        if(pending===0){render();showError("");}
+        if(pending===0){render();if(rrFiles.length<=3)showError("");}
       };
-      r.readAsText(f);
+      const r=new FileReader();
+      if(isXL){
+        r.onload=ev=>{const buf=ev.target.result;ensureXLSX(()=>finish(xlsxToText(buf)));};
+        r.readAsArrayBuffer(f);
+      } else {
+        r.onload=ev=>finish(ev.target.result);
+        r.readAsText(f);
+      }
     });
     if(rrFiles.length>3)
       showError("Only the first 3 files were loaded as rent rolls. Extra files ignored.");
@@ -2486,7 +2519,7 @@ function loadAllAFFiles(){
       };
       if(asBuffer==='text' && isXL){
         const r=new FileReader();
-        r.onload=ev=>finish(xlsxToText(ev.target.result));
+        r.onload=ev=>{const buf=ev.target.result;ensureXLSX(()=>finish(xlsxToText(buf)));};
         r.readAsArrayBuffer(file);
       } else {
         const r=new FileReader();
@@ -3031,7 +3064,6 @@ function render(){
     const si=document.getElementById("steps-indicator");
     const INV_STEPS=["Setup & Upload","Review Metrics","Generate Report"];
     si.innerHTML=INV_STEPS.map((s,i)=>`<div class="step"><div class="step-circle ${i<state.step?"done":i===state.step?"active":""}">${i<state.step?"✓":i+1}</div><div class="step-label ${i===state.step?"active":""}">${s}</div></div>`).join("");
-    document.getElementById("error-box").style.display="none";
     if(state.step===0){renderInvestmentStep0();return;}
     if(state.step===1 && !state.invMetrics){
       const el=document.getElementById("step-content");
@@ -3286,7 +3318,7 @@ function render(){
       ${fileRow("rr2","Rent Roll — End of "+mo[1],"Pull at end of month",'text',"tryAutoFillPropertyName")}
       ${fileRow("rr3","Rent Roll — End of "+mo[2],"Pull at end of month",'text',"tryAutoFillPropertyName")}`;
     const chartsSection = `
-      <div class="section-label" style="margin-top:12px">AppFolio IM Charts <span style="margin-left:8px;background:#fdf8ec;color:#96771f;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">${chartsN}/10 uploaded</span></div>
+      <div class="section-label" style="margin-top:12px">AppFolio IM Charts <span style="margin-left:8px;background:#fdf8ec;color:#96771f;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">${chartsN}/11 uploaded</span></div>
       <div style="background:#fdf8ec;border:1px solid #e8d49a;border-radius:10px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:12px">
         <div>
           <div style="font-weight:600;font-size:13px;color:#1a1400;margin-bottom:3px">Bulk Upload Charts</div>
@@ -3310,7 +3342,7 @@ function render(){
       const afUploaded=Object.keys(state.files).filter(k=>["income","rr1","rr2","rr3","leasingSummary","renewalSummary"].includes(k)&&state.files[k]).length;
       const _resumeNotice = (state.metrics && afUploaded===0) ? `
       <div style="background:#fef3cd;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:#92400e;">
-        <strong>📂 Resuming saved report</strong> — Files are not stored between sessions. Please re-upload your AppFolio exports below before re-processing.
+        <strong>📂 Resuming saved report.</strong> No saved files were found for this report (older saves did not store them). Please re-upload your AppFolio exports below before re-processing.
       </div>` : "";
       el.innerHTML = commonTop + _resumeNotice + `
       <div class="section-label">AppFolio Reports <span style="margin-left:8px;background:#fdf8ec;color:#96771f;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">${afUploaded}/6 uploaded</span></div>
@@ -3343,12 +3375,12 @@ function render(){
         <table>
           <thead><tr><th>Metric</th><th>${state.prevQuarterLabel||"Prior Quarter"}</th><th>${state.currentQuarter||""}</th><th>Change</th></tr></thead>
           <tbody>
-            ${[["Avg Occupancy",prev.occupancy+"%",m.occupancy+"%",pct(m.occupancy,prev.occupancy)],
-               ["Total Income",fmt(prev.income),fmt(m.totalIncome),pct(m.totalIncome,prev.income)],
-               ["Operating Expenses",fmt(prev.expenses),fmt(m.totalExpense),pct(m.totalExpense,prev.expenses)],
-               ["NOI",fmt(prev.noi),fmt(m.noi),pct(m.noi,prev.noi)],
-               ["Capex",fmt(prev.capex),fmt(m.capex),pct(m.capex,prev.capex)]
-              ].map(([l,q4,q1,chg])=>`<tr><td>${l}</td><td>${q4}</td><td><strong>${q1}</strong></td><td class="${chg.startsWith("+")?"chg-pos":"chg-neg"}">${chg}</td></tr>`).join("")}
+            ${[["Avg Occupancy",occKnown(prev)?prev.occupancy+"%":"—",m.occupancy+"%",occKnown(prev)?(m.occupancy-prev.occupancy>=0?"+":"")+(m.occupancy-prev.occupancy)+"%":"—",true],
+               ["Total Income",fmt(prev.income),fmt(m.totalIncome),pct(m.totalIncome,prev.income),true],
+               ["Operating Expenses",fmt(prev.expenses),fmt(m.totalExpense),pct(m.totalExpense,prev.expenses),false],
+               ["NOI",fmt(prev.noi),fmt(m.noi),pct(m.noi,prev.noi),true],
+               ["Capex",fmt(prev.capex),fmt(m.capex),pct(m.capex,prev.capex),false]
+              ].map(([l,q4,q1,chg,upGood])=>`<tr><td>${l}</td><td>${q4}</td><td><strong>${q1}</strong></td><td class="${/^[+-]/.test(chg)?(chg.startsWith("+")===upGood?"chg-good":"chg-bad"):""}">${chg}</td></tr>`).join("")}
           </tbody>
         </table>
       </div>
@@ -3390,7 +3422,7 @@ function render(){
           <span class="narrative-label">${l}<span class="auto-badge">AUTO</span></span>
           <textarea id="narr-${k}" oninput="state.narratives['${k}']=this.value">${state.narratives[k]}</textarea>
         </div>`).join("")}
-      <div class="charts-info">📊 <strong>${chartsN}/10 charts uploaded</strong> — ${chartsN===10?"All charts ready!":"Missing charts will show placeholders."}</div>
+      <div class="charts-info">📊 <strong>${chartsN}/11 charts uploaded</strong> — ${chartsN===11?"All charts ready!":"Missing charts will show placeholders."}</div>
       <div class="btn-row">
         <button class="btn-back" onclick="state.step=1;render()">← Back</button>
         <button class="save-btn" onclick="saveProgress()">💾 Save</button>
@@ -3439,7 +3471,7 @@ function calcEconAvg(){
 }
 function resetAll(){
   state={...state,showHome:false,source:null,step:0,rewritingNarratives:false,propertyName:"",currentQuarter:"",prevQuarterLabel:"",assetFacts:null,files:{income:null,rr1:null,rr2:null,rr3:null,leasing:null,leasingSummary:null,renewalSummary:null,bank:null,trialBalance:null,delinquency:null,rentEngine:null,capexDetail:null},charts:{chart_operating_income:null,chart_operating_expense:null,chart_income_vs_expense:null,chart_noi:null,chart_lease_expirations:null,chart_rent_growth:null,chart_occupancy_rate:null,chart_capital_expense:null,chart_maintenance_expense:null,chart_loss_to_lease:null,chart_noi_vs_debt_service:null},econOcc:{m1:"",m2:"",m3:""},prevMetrics:null,propertyPhoto:null,metrics:null,narratives:{income:"",expenses:"",capex:"",outlook:""},reportHTML:null,generating:false,
-  investmentName:"",invProperties:[],invCharts:{inv_operating_income:null,inv_operating_expense:null,inv_income_by_property:null,inv_expense_by_property:null,inv_income_vs_expense:null,inv_noi:null,inv_noi_by_property:null,inv_lease_expirations:null,inv_rent_growth:null,inv_occupancy_rate:null,inv_occupancy_by_property:null,inv_noi_vs_debt_service:null},invNarratives:{income:"",expenses:"",capex:"",outlook:""},invMetrics:null,invReportHTML:null,invLoan:{principalInception:"",principalInceptionDate:"",principalCurrent:"",principalCurrentDate:"",writeoffs:""},invPrevMetrics:null,prevOccupancyInput:"",invSections:{loanPrincipal:true,writeoffs:true,financialCharts:true,leasingSection:true}};
+  investmentName:"",invProperties:[],invCharts:{inv_operating_income:null,inv_operating_expense:null,inv_income_by_property:null,inv_expense_by_property:null,inv_income_vs_expense:null,inv_noi:null,inv_noi_by_property:null,inv_lease_expirations:null,inv_rent_growth:null,inv_occupancy_rate:null,inv_occupancy_by_property:null,inv_noi_vs_debt_service:null},invNarratives:{income:"",expenses:"",capex:"",outlook:""},invMetrics:null,invReportHTML:null,invLoan:{principalInception:"",principalInceptionDate:"",principalCurrent:"",principalCurrentDate:"",writeoffs:""},invPrevMetrics:null,prevOccupancyInput:"",invSections:{loanPrincipal:true,writeoffs:true,financialCharts:true,leasingSection:true},_savedThisStep:false,_showInvPrevPicker:false,_invPrevSource:null};
   render();
 }
 // Startup: open IndexedDB, load cache, migrate any legacy localStorage data, then render
@@ -3452,9 +3484,6 @@ function startApp(){
   render();
 }
 idbInit(startApp);
-// Hard fallback: script is at end of body so DOM is already ready.
-// If idbInit hasn't fired within 1.5s, force render anyway.
-setTimeout(startApp, 1500);
 const _logoEl=document.getElementById('lw-header-logo');
 if(_logoEl) _logoEl.src = LOGO_SYMBOL;
 </script>

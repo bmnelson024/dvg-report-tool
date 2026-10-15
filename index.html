@@ -113,7 +113,8 @@
   <div style="margin-bottom:20px">
     <div style="display:flex;align-items:center;justify-content:space-between">
       <h1 style="display:flex;align-items:center;gap:12px;"><img id="lw-header-logo" style="height:40px;width:auto;" alt=""/><span>Quarterly Report Builder</span></h1>
-      <button onclick="if(confirm('Clear all saved data and start completely fresh?')){clearDvData();alert('Done! Click OK and the page will reload.');location.reload();}" style="background:white;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap">🗑 Clear All Data</button>
+      <div style="display:flex;gap:8px;align-items:center"><span id="cloud-status" onclick="sbOpenModal()" style="display:none"></span>
+      <button onclick="clearAllDataFlow()" style="background:white;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap">🗑 Clear All Data</button></div>
     </div>
     <div class="subtitle">Quarterly Report Tool</div>
   </div>
@@ -161,6 +162,8 @@ const DV_NARRATIVE_FN_URL = "https://beoquaazkkxjisxnmrmg.supabase.co/functions/
 const DV_NARRATIVE_SECRET = "L-qzg7staHlOKoDBS2578q4EGW463MsFJcsheZYNp8Y";
 // occKnown: prior-quarter occupancy is only meaningful when it was actually entered/loaded
 const occKnown = p => !!(p && p.occupancy!=null && p.occupancy>0);
+// AppFolio labels prospect inquiries "Interests Received"; older exports used "Inquiries Received"
+const getInquiries = r => parseInt((r&&(r["Interests Received"]??r["Inquiries Received"]))||0)||0;
 const PREV_SAFE = { occupancy:null, income:0, expenses:0, noi:0, capex:0, expenseCategories:[] };
 const STEPS = ["Upload Data", "Review Metrics", "Generate Report"];
 const SAVES_INDEX_KEY = "dv_saves_index";
@@ -220,6 +223,7 @@ function idbInit(cb){
 function dbGet(k){return Object.prototype.hasOwnProperty.call(_dbCache,k)?_dbCache[k]:null;}
 function dbSet(k,v){
   _dbCache[k]=v;
+  sbQueue(k,'set');
   if(!_idb)return;
   const fail=err=>{console.warn('IDB write failed for key:',k,err);showError("Save failed: the browser could not store your data"+(err&&err.name==="QuotaExceededError"?" because storage is full":"")+". Download a backup, delete old reports, and try again.");};
   try{
@@ -231,10 +235,264 @@ function dbSet(k,v){
 }
 function dbRemove(k){
   delete _dbCache[k];
+  sbQueue(k,'del');
   if(!_idb)return;
   try{_idb.transaction('items','readwrite').objectStore('items').delete(k);}catch(e){}
 }
 function dbKeys(){return Object.keys(_dbCache);}
+
+// ─── CLOUD SYNC (Supabase) ────────────────────────────────────────────────────
+// IndexedDB stays the working copy (fast, works offline). When signed in, every
+// dbSet/dbRemove is queued and pushed to the dv_items table; on sign-in/startup the
+// cloud copy is pulled down. Leave DV_SB_URL / DV_SB_KEY blank to disable cloud sync.
+// The anon/publishable key is public by design: row-level security limits each
+// signed-in user to their own rows.
+const DV_SB_URL = "https://qifexghiknpjwpxkfmbp.supabase.co";
+const DV_SB_KEY = "sb_publishable_0RrsVhC1lQEgJ6nvj8U0YA_W5yp1GNw";   // publishable key: public by design, RLS protects data
+const SB_SESSION_KEY="dvsb_session", SB_PENDING_KEY="dvsb_pending", SB_SEEDED_PREFIX="dvsb_seeded_";
+const sbConfigured=()=>!!(DV_SB_URL&&DV_SB_KEY);
+let _sbSession=null, _sbPending={}, _sbSeq=0;
+let _sbStatus="off", _sbError="";
+let _sbPulling=false, _sbPulled=false, _sbFlushing=false, _sbApplying=false;
+let _sbFlushTimer=null, _sbRetryTimer=null, _sbRefreshing=null;
+
+function sbLoadLocal(){
+  try{_sbSession=JSON.parse(localStorage.getItem(SB_SESSION_KEY)||"null");}catch(e){_sbSession=null;}
+  try{_sbPending=JSON.parse(localStorage.getItem(SB_PENDING_KEY)||"{}")||{};}catch(e){_sbPending={};}
+  Object.values(_sbPending).forEach(p=>{if(p&&p.seq>_sbSeq)_sbSeq=p.seq;});
+}
+function sbStoreSession(){try{_sbSession?localStorage.setItem(SB_SESSION_KEY,JSON.stringify(_sbSession)):localStorage.removeItem(SB_SESSION_KEY);}catch(e){}}
+function sbStorePending(){try{localStorage.setItem(SB_PENDING_KEY,JSON.stringify(_sbPending));}catch(e){}}
+function sbSetStatus(st,err){_sbStatus=st;_sbError=err||"";sbRenderBadge();}
+
+// Called by dbSet/dbRemove. Queues even while signed out so offline edits upload on next sign-in.
+function sbQueue(k,op){
+  if(!sbConfigured()||_sbApplying)return;
+  _sbPending[k]={op,seq:++_sbSeq};
+  sbStorePending();
+  if(_sbSession){
+    if(_sbStatus!=="error"&&_sbStatus!=="offline")sbSetStatus("pending");
+    clearTimeout(_sbFlushTimer);_sbFlushTimer=setTimeout(sbFlush,1500);
+  }
+}
+
+async function sbAuth(grant,body){
+  let r;
+  try{
+    r=await fetch(DV_SB_URL+"/auth/v1/token?grant_type="+grant,{method:"POST",headers:{"apikey":DV_SB_KEY,"Content-Type":"application/json"},body:JSON.stringify(body)});
+  }catch(e){const err=new Error("Could not reach Supabase. Check your internet connection.");err.offline=true;throw err;}
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){const err=new Error(j.error_description||j.msg||j.message||("Sign-in failed (HTTP "+r.status+")"));err.status=r.status;throw err;}
+  _sbSession={access_token:j.access_token,refresh_token:j.refresh_token,expires_at:Date.now()+(j.expires_in||3600)*1000,user:{id:j.user&&j.user.id,email:j.user&&j.user.email}};
+  sbStoreSession();
+}
+async function sbToken(force){
+  if(!_sbSession)throw new Error("Not signed in.");
+  if(force||Date.now()>_sbSession.expires_at-60000){
+    if(!_sbRefreshing){
+      _sbRefreshing=sbAuth("refresh_token",{refresh_token:_sbSession.refresh_token})
+        .catch(e=>{if(!e.offline){_sbSession=null;sbStoreSession();const x=new Error("Your cloud sign-in expired. Click the cloud badge to sign in again.");x.signedOut=true;throw x;}throw e;})
+        .finally(()=>{_sbRefreshing=null;});
+    }
+    await _sbRefreshing;
+  }
+  return _sbSession.access_token;
+}
+async function sbRest(path,opts,retried){
+  opts=opts||{};
+  const tok=await sbToken();
+  let r;
+  try{
+    r=await fetch(DV_SB_URL+"/rest/v1/"+path,{...opts,headers:{"apikey":DV_SB_KEY,"Authorization":"Bearer "+tok,"Content-Type":"application/json",...(opts.headers||{})}});
+  }catch(e){const err=new Error("Could not reach Supabase. Check your internet connection.");err.offline=true;throw err;}
+  if(r.status===401&&!retried){await sbToken(true);return sbRest(path,opts,true);}
+  if(!r.ok){
+    const t=await r.text().catch(()=>"");let msg=t;try{const j=JSON.parse(t);msg=j.message||j.hint||t;}catch(e){}
+    if(r.status===404||/dv_items/.test(msg)&&/not find|does not exist/i.test(msg))msg="The dv_items table was not found. Run the setup SQL in the Supabase SQL Editor. ("+msg+")";
+    if(r.status===413)msg="A saved item is too large for Supabase to accept in one request. ("+msg+")";
+    const err=new Error(msg||("HTTP "+r.status));err.status=r.status;throw err;
+  }
+  return r;
+}
+
+// Merge two saves indexes so a report saved on another device isn't dropped from the list
+function sbMergeIndex(localStr,cloudStr,cloudKeys){
+  let a=[],b=[];try{a=JSON.parse(localStr||"[]");}catch(e){}try{b=JSON.parse(cloudStr||"[]");}catch(e){}
+  const by={};
+  [...a,...b].forEach(e=>{if(!e||!e.key)return;const cur=by[e.key];if(!cur||(e.savedAt||"")>(cur.savedAt||""))by[e.key]=e;});
+  return JSON.stringify(Object.values(by)
+    .filter(e=>dbGet(SAVE_PREFIX+e.key)!=null||cloudKeys.has(SAVE_PREFIX+e.key))
+    .sort((x,y)=>(y.savedAt||"").localeCompare(x.savedAt||"")));
+}
+
+async function sbSync(){
+  if(!sbConfigured()||!_sbSession||_sbPulling)return;
+  clearTimeout(_sbRetryTimer);
+  _sbPulling=true;sbSetStatus("syncing");
+  try{
+    const rows=[],page=20;
+    for(let off=0;;off+=page){
+      const r=await sbRest("dv_items?select=key,value&order=key&limit="+page+"&offset="+off);
+      const batch=await r.json();rows.push(...batch);
+      if(batch.length<page)break;
+    }
+    const cloud=new Map(rows.map(x=>[x.key,x.value]));
+    const cloudKeys=new Set(cloud.keys());
+    const seededKey=SB_SEEDED_PREFIX+_sbSession.user.id;
+    let seeded=false;try{seeded=localStorage.getItem(seededKey)==="1";}catch(e){}
+    const toUpload=[];
+    _sbApplying=true;
+    try{
+      cloud.forEach((v,k)=>{
+        if(_sbPending[k]){
+          if(k===SAVES_INDEX_KEY&&_sbPending[k].op==="set")dbSet(k,sbMergeIndex(dbGet(k),v,cloudKeys));
+          return; // local change not yet uploaded wins
+        }
+        if(dbGet(k)!==v)dbSet(k,v);
+      });
+      dbKeys().forEach(k=>{
+        if(cloud.has(k)||_sbPending[k])return;
+        if(!seeded)toUpload.push(k);   // first sign-in in this browser: upload existing local data
+        else dbRemove(k);              // deleted on another device
+      });
+    }finally{_sbApplying=false;}
+    toUpload.forEach(k=>sbQueue(k,"set"));
+    if(_sbPending[SAVES_INDEX_KEY])_sbPending[SAVES_INDEX_KEY].seq=++_sbSeq; // re-upload merged index
+    sbStorePending();
+    try{localStorage.setItem(seededKey,"1");}catch(e){}
+    _sbPulled=true;_sbPulling=false;
+    if(!state.source&&state.step===0){state.showHome=getSavesIndex().length>0;render();}
+    sbSetStatus("synced");
+    sbFlush();
+  }catch(e){
+    _sbPulling=false;
+    sbFail(e,sbSync);
+  }
+}
+
+async function sbFlush(){
+  clearTimeout(_sbFlushTimer);
+  if(_sbFlushing||!_sbSession||!_sbPulled)return;
+  const snap=Object.entries(_sbPending);
+  if(!snap.length){sbSetStatus("synced");return;}
+  _sbFlushing=true;sbSetStatus("syncing");
+  try{
+    const done=[];
+    for(const [k,p] of snap){
+      if(p.op!=="del")continue;
+      await sbRest("dv_items?key=eq."+encodeURIComponent(k),{method:"DELETE",headers:{"Prefer":"return=minimal"}});
+      done.push([k,p.seq]);
+    }
+    let batch=[],bkeys=[],size=0;
+    const send=async()=>{
+      if(!batch.length)return;
+      await sbRest("dv_items?on_conflict=user_id,key",{method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify(batch)});
+      done.push(...bkeys);batch=[];bkeys=[];size=0;
+    };
+    for(const [k,p] of snap){
+      if(p.op!=="set")continue;
+      const v=dbGet(k);
+      if(v==null){done.push([k,p.seq]);continue;}
+      const val=typeof v==="string"?v:JSON.stringify(v);
+      if(size&&size+val.length>2000000)await send();
+      batch.push({key:k,value:val,updated_at:new Date().toISOString()});bkeys.push([k,p.seq]);size+=val.length;
+    }
+    await send();
+    done.forEach(([k,seq])=>{if(_sbPending[k]&&_sbPending[k].seq===seq)delete _sbPending[k];});
+    sbStorePending();
+    _sbFlushing=false;
+    if(Object.keys(_sbPending).length)sbFlush();else sbSetStatus("synced");
+  }catch(e){
+    _sbFlushing=false;
+    sbFail(e,sbFlush);
+  }
+}
+
+function sbFail(e,retryFn){
+  console.warn("Cloud sync:",e);
+  if(e.signedOut){_sbPulled=false;sbSetStatus("off");showError(e.message);return;}
+  if(e.offline){sbSetStatus("offline","Offline. Changes are saved in this browser and will upload when the connection returns.");}
+  else{sbSetStatus("error",e.message);}
+  clearTimeout(_sbRetryTimer);_sbRetryTimer=setTimeout(retryFn,e.offline?30000:60000);
+}
+
+async function sbSignIn(){
+  const em=(document.getElementById("sb-email")||{}).value||"", pw=(document.getElementById("sb-pass")||{}).value||"";
+  const msg=document.getElementById("sb-msg"), btn=document.getElementById("sb-go");
+  if(!em||!pw){msg.textContent="Enter your email and password.";return;}
+  btn.disabled=true;btn.textContent="Signing in...";msg.textContent="";
+  try{
+    await sbAuth("password",{email:em.trim(),password:pw});
+    sbCloseModal();showToast("✓ Signed in to cloud sync");
+    _sbPulled=false;sbSync();
+  }catch(e){
+    msg.textContent=e.status===400?"Email or password is incorrect.":e.message;
+    btn.disabled=false;btn.textContent="Sign In";
+  }
+}
+function sbSignOut(){
+  if(Object.keys(_sbPending).length&&!confirm("Some changes have not uploaded to the cloud yet. They stay saved in this browser and will upload next time you sign in. Sign out anyway?"))return;
+  const tok=_sbSession&&_sbSession.access_token;
+  if(tok)fetch(DV_SB_URL+"/auth/v1/logout",{method:"POST",headers:{"apikey":DV_SB_KEY,"Authorization":"Bearer "+tok}}).catch(()=>{});
+  _sbSession=null;sbStoreSession();_sbPulled=false;
+  clearTimeout(_sbRetryTimer);clearTimeout(_sbFlushTimer);
+  sbCloseModal();sbSetStatus("off");showToast("Signed out of cloud sync");
+}
+function sbCloseModal(){const m=document.getElementById("sb-modal");if(m)m.remove();}
+function sbOpenModal(){
+  sbCloseModal();
+  const pend=Object.keys(_sbPending).length;
+  const box=document.createElement("div");box.id="sb-modal";
+  box.style.cssText="position:fixed;inset:0;background:rgba(26,20,0,0.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px";
+  const inner=_sbSession
+    ? `<h3 style="margin:0 0 6px;font-size:16px">Cloud Sync</h3>
+       <p style="font-size:13px;color:#555;margin:0 0 10px">Signed in as <strong>${_sbSession.user.email||""}</strong>.</p>
+       <p style="font-size:13px;margin:0 0 6px">Status: <strong>${{synced:"All changes saved to the cloud",syncing:"Syncing...",pending:"Changes waiting to upload",error:"Sync error",offline:"Offline"}[_sbStatus]||_sbStatus}</strong>${pend?` (${pend} item${pend>1?"s":""} waiting)`:""}</p>
+       ${_sbError?`<div style="background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;border-radius:6px;padding:8px 10px;font-size:12px;margin:8px 0;word-break:break-word">${_sbError.replace(/</g,"&lt;")}</div>`:""}
+       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+         <button class="btn-back" onclick="sbSignOut()">Sign Out</button>
+         <button class="btn-back" onclick="_sbPulled=false;sbSync();sbCloseModal()">Sync Now</button>
+         <button class="btn-next" onclick="sbCloseModal()">Close</button>
+       </div>`
+    : `<h3 style="margin:0 0 6px;font-size:16px">Sign in to Cloud Sync</h3>
+       <p style="font-size:12px;color:#555;margin:0 0 12px">Saved reports sync to your Supabase account so they're backed up and available on any computer.</p>
+       <input id="sb-email" type="email" placeholder="Email" autocomplete="username" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #d6c48a;border-radius:6px;margin-bottom:8px;font-size:14px"/>
+       <input id="sb-pass" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')sbSignIn()" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #d6c48a;border-radius:6px;font-size:14px"/>
+       <div id="sb-msg" style="color:#dc2626;font-size:12px;min-height:16px;margin-top:6px"></div>
+       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+         <button class="btn-back" onclick="sbCloseModal()">Cancel</button>
+         <button id="sb-go" class="btn-next" onclick="sbSignIn()">Sign In</button>
+       </div>`;
+  box.innerHTML=`<div style="background:white;border-radius:12px;padding:20px;width:100%;max-width:380px;box-shadow:0 10px 40px rgba(0,0,0,0.25);font-family:Inter,sans-serif;border-top:4px solid #B8942A">${inner}</div>`;
+  box.addEventListener("click",ev=>{if(ev.target===box)sbCloseModal();});
+  document.body.appendChild(box);
+  const f=document.getElementById("sb-email");if(f)f.focus();
+}
+function sbRenderBadge(){
+  const el=document.getElementById("cloud-status");if(!el)return;
+  if(!sbConfigured()){el.style.display="none";return;}
+  const look=!_sbSession?["☁ Sign in to sync","#7a6420","#fdf8ec","#e8d49a"]
+    :{synced:["☁ Synced","#166534","#f0fdf4","#86efac"],syncing:["☁ Syncing...","#7a6420","#fdf8ec","#e8d49a"],pending:["☁ Saving...","#7a6420","#fdf8ec","#e8d49a"],
+      offline:["☁ Offline","#92400e","#fffbeb","#fcd34d"],error:["⚠ Sync error","#991b1b","#fef2f2","#fca5a5"]}[_sbStatus]||["☁ Cloud","#7a6420","#fdf8ec","#e8d49a"];
+  el.style.cssText=`display:inline-block;color:${look[1]};background:${look[2]};border:1px solid ${look[3]};border-radius:6px;padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap`;
+  el.textContent=look[0];
+  el.title=_sbError||(_sbSession?"Signed in as "+(_sbSession.user.email||""):"Not signed in");
+}
+// Clear data: when signed in, offer to also delete the cloud copy
+async function clearAllDataFlow(){
+  if(!confirm("Clear all saved reports from this browser?"))return;
+  if(sbConfigured()&&_sbSession){
+    const everywhere=confirm("Also delete your cloud copy in Supabase?\n\nOK = delete everywhere (cannot be undone)\nCancel = clear this browser only; your reports download again from the cloud on reload");
+    if(everywhere){
+      try{await sbRest("dv_items?user_id=eq."+encodeURIComponent(_sbSession.user.id),{method:"DELETE",headers:{"Prefer":"return=minimal"}});}
+      catch(e){showError("Could not delete the cloud copy: "+e.message+". Nothing was cleared.");return;}
+    }
+  }
+  _sbPending={};sbStorePending();
+  clearDvData();
+  showToast("✓ Data cleared. Reloading...");setTimeout(()=>location.reload(),1200);
+}
+window.addEventListener("online",()=>{if(_sbSession){if(!_sbPulled)sbSync();else sbFlush();}});
 
 // One-time migration: copy any lw_* keys from localStorage → IndexedDB then remove them
 function migrateLegacyData(){
@@ -401,6 +659,7 @@ function clearInvPrevMetrics(){
 }
 function saveProgress(){
   if(!_cacheLoaded){showError("Saved reports are still loading. Wait a few seconds and click Save again.");return;}
+  if(_sbPulling){showError("Syncing with the cloud. Wait a few seconds and click Save again.");return;}
   const isInv = state.source==='investment';
   // Saves are allowed at any step (even step 0, before processing/uploading files) —
   // property name + quarter are the only real requirements.
@@ -646,7 +905,7 @@ function renderHome(){
     <div style="margin-top:16px;display:flex;gap:10px">
       <button class="btn-home" onclick="downloadBackup()" style="font-size:12px">⬇ Download Backup</button>
       <button class="btn-home" onclick="restoreBackup()" style="font-size:12px">⬆ Restore Backup</button>
-      <button class="btn-home" onclick="if(confirm('Delete ALL saved reports and clear all data? This cannot be undone.')){clearDvData();showToast('✓ All data cleared — reloading...');setTimeout(()=>location.reload(),1200);}" style="font-size:12px;color:#dc2626;border-color:#fca5a5">🗑 Clear All Data</button>
+      <button class="btn-home" onclick="clearAllDataFlow()" style="font-size:12px;color:#dc2626;border-color:#fca5a5">🗑 Clear All Data</button>
     </div>`;
 }
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -1478,8 +1737,8 @@ function parsePropertyMetrics(prop){
   if(dt){delinquency=parseCur(dt["Amount Receivable"]||0);}else{dr.forEach(r=>{const a=parseCur(r["Amount Receivable"]||0);if(a>0)delinquency+=a;});}
   const lr=parseDelim(prop.files.leasingSummary||prop.files.leasing||"");
   const lt=lr.find(r=>/^total/i.test(r["Unit Type"]||""));
-  if(lt){newLeases=parseInt(lt["Leased"]||0)||0;inquiries=parseInt(lt["Inquiries Received"]||0)||0;applications=parseInt(lt["Applications Received"]||0)||0;}
-  else{lr.forEach(r=>{newLeases+=parseInt(r["Leased"]||0)||0;inquiries+=parseInt(r["Inquiries Received"]||0)||0;applications+=parseInt(r["Applications Received"]||0)||0;});}
+  if(lt){newLeases=parseInt(lt["Leased"]||0)||0;inquiries=getInquiries(lt);applications=parseInt(lt["Applications Received"]||0)||0;}
+  else{lr.forEach(r=>{newLeases+=parseInt(r["Leased"]||0)||0;inquiries+=getInquiries(r);applications+=parseInt(r["Applications Received"]||0)||0;});}
   const rt=typeof prop.files.renewalSummary==="string"?prop.files.renewalSummary:"";
   const rm=rt.match(/Total\s+(\d+)\s+Offers?/i);
   if(rm)renewals=parseInt(rm[1])||0;else renewals=parseDelim(rt).filter(r=>/renewed/i.test(r["Status"]||"")).length;
@@ -2233,20 +2492,20 @@ function processDataAppFolio() {
     }
 
     // ── Leasing Summary ──────────────────────────────────────────────────────
-    // Columns: Unit Type, # of Units, # of Model Units, Inquiries Received,
+    // Columns: Unit Type, # of Units, # of Model Units, Interests Received,
     //          Showings Completed, Applications Received, Move Ins, Move Outs, Leased
     let newLeases=0, inquiries=0, applications=0;
     const leasingRows = parseDelim(state.files.leasingSummary||state.files.leasing||"");
     const leasingTotal = leasingRows.find(r => /^total/i.test(r["Unit Type"]||""));
     if (leasingTotal) {
       newLeases    = parseInt(leasingTotal["Leased"]||0)||0;
-      inquiries    = parseInt(leasingTotal["Inquiries Received"]||0)||0;
+      inquiries    = getInquiries(leasingTotal);
       applications = parseInt(leasingTotal["Applications Received"]||0)||0;
     } else {
       // Fallback: sum all non-header rows
       leasingRows.forEach(r => {
         newLeases    += parseInt(r["Leased"]||0)||0;
-        inquiries    += parseInt(r["Inquiries Received"]||0)||0;
+        inquiries    += getInquiries(r);
         applications += parseInt(r["Applications Received"]||0)||0;
       });
     }
@@ -3482,6 +3741,7 @@ function startApp(){
   migrateLegacyData();
   state.showHome = getSavesIndex().length > 0;
   render();
+  if(sbConfigured()){sbLoadLocal();sbRenderBadge();if(_sbSession)sbSync();}
 }
 idbInit(startApp);
 const _logoEl=document.getElementById('lw-header-logo');

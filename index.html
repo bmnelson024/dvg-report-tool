@@ -80,6 +80,17 @@
   .print-instructions ol { padding-left: 18px; line-height: 2; margin-top: 6px; }
   iframe { width: 100%; height: 820px; border: 1px solid #e8d49a; border-radius: 8px; }
   .new-quarter-btn { margin-top: 10px; width: 100%; padding: 10px 0; border-radius: 8px; border: none; background: #1a1400; color: white; font-weight: 700; font-size: 14px; cursor: pointer; font-family: Inter, sans-serif; }
+  .q-group-hd { display:flex; align-items:baseline; gap:10px; margin:6px 0 10px; }
+  .q-group-hd .q-title { font-size:15px; font-weight:700; color:#1a1400; }
+  .q-group-hd .q-sub { font-size:12px; color:#7a6420; }
+  .q-prev-label { font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#96771f; margin:22px 0 8px; }
+  details.q-folder { background:#fdf8ec; border:1px solid #e8d49a; border-radius:12px; margin-bottom:8px; }
+  details.q-folder > summary { list-style:none; cursor:pointer; padding:12px 16px; display:flex; align-items:center; gap:10px; font-weight:700; font-size:14px; color:#1a1400; user-select:none; }
+  details.q-folder > summary::-webkit-details-marker { display:none; }
+  details.q-folder > summary .q-chev { margin-left:auto; color:#96771f; transition:transform 0.15s; }
+  details.q-folder[open] > summary .q-chev { transform:rotate(90deg); }
+  details.q-folder > summary .q-count { font-size:12px; font-weight:600; color:#7a6420; }
+  details.q-folder .q-body { padding:0 12px 4px; }
   .home-card { background: white; border: 1px solid #e8d49a; border-radius: 12px; padding: 16px 20px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; transition: border-color 0.15s; }
   .home-card:hover { border-color: #1a1400; }
   .home-prop { font-weight: 700; font-size: 14px; color: #1a1400; }
@@ -162,6 +173,8 @@ const DV_NARRATIVE_FN_URL = "https://beoquaazkkxjisxnmrmg.supabase.co/functions/
 const DV_NARRATIVE_SECRET = "L-qzg7staHlOKoDBS2578q4EGW463MsFJcsheZYNp8Y";
 // occKnown: prior-quarter occupancy is only meaningful when it was actually entered/loaded
 const occKnown = p => !!(p && p.occupancy!=null && p.occupancy>0);
+// escHtml: user-typed text (names, narratives, asset facts) is escaped before it goes into report HTML
+const escHtml = v => String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 // AppFolio labels prospect inquiries "Interests Received"; older exports used "Inquiries Received"
 const getInquiries = r => parseInt((r&&(r["Interests Received"]??r["Inquiries Received"]))||0)||0;
 const PREV_SAFE = { occupancy:null, income:0, expenses:0, noi:0, capex:0, expenseCategories:[] };
@@ -876,6 +889,47 @@ function showToast(msg){
   clearTimeout(t._timeout);
   t._timeout=setTimeout(()=>t.classList.remove("show"),2500);
 }
+// ─── HOME: saved reports grouped by quarter ──────────────────────────────────
+// Latest quarter shows open at the top; earlier quarters collapse into folders.
+// Open/closed folder state is a per-browser convenience (dvui_ prefix keeps it out of sync + backups).
+const HOME_OPEN_KEY="dvui_open_quarters";
+function quarterSortVal(q){const m=String(q||"").match(/Q([1-4])\s*(\d{4})/i);return m?parseInt(m[2])*10+parseInt(m[1]):-1;}
+function homeOpenQuarters(){try{return JSON.parse(localStorage.getItem(HOME_OPEN_KEY)||"[]");}catch(e){return[];}}
+function homeFolderToggle(q,open){try{const set=new Set(homeOpenQuarters());open?set.add(q):set.delete(q);localStorage.setItem(HOME_OPEN_KEY,JSON.stringify([...set]));}catch(e){}}
+function homeCard(s,fmtDate){return `
+      <div class="home-card">
+        <div style="flex:1;min-width:0">
+          <div class="home-prop">${escHtml(s.propertyName||"Unnamed")}${s.source==="investment"?`<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;background:#f3e8ff;color:#7c3aed;margin-left:6px">INVESTMENT</span>`:""}</div>
+          <div class="home-meta">Saved ${fmtDate(s.savedAt||"")} &nbsp;·&nbsp; Step ${(s.step||0)+1} of 3</div>
+        </div>
+        <button class="home-resume-btn" onclick="loadSave('${s.key}')">Resume →</button>
+        <button class="home-nextq-btn" onclick="startNextQuarter('${s.key}')" title="Start the next quarter's report, carrying forward property/investment info and this quarter's numbers as the prior-quarter comparison">+ Next Quarter</button>
+        <button class="home-delete-btn" onclick="deleteSave('${s.key}')">Delete</button>
+      </div>`;}
+function homeGroupedList(saves,fmtDate){
+  const groups={};
+  saves.forEach(s=>{const q=quarterSortVal(s.quarter)>0?String(s.quarter).trim():"Other";(groups[q]=groups[q]||[]).push(s);});
+  const order=Object.keys(groups).sort((a,b)=>quarterSortVal(b)-quarterSortVal(a));
+  const byName=(a,b)=>(a.propertyName||"").localeCompare(b.propertyName||"",undefined,{sensitivity:"base"});
+  const cnt=n=>n+" report"+(n===1?"":"s");
+  const openSet=new Set(homeOpenQuarters());
+  const [latest,...older]=order;
+  const latestList=groups[latest].sort(byName);
+  let html=`<div class="q-group-hd"><span class="q-title">${escHtml(latest)}</span><span class="q-sub">${latest==="Other"?"":"Current quarter · "}${cnt(latestList.length)}</span></div>`
+    +latestList.map(s=>homeCard(s,fmtDate)).join("");
+  if(older.length){
+    html+=`<div class="q-prev-label">Previous Quarters</div>`;
+    html+=older.map(q=>{
+      const list=groups[q].sort(byName);
+      const qAttr=escHtml(q).replace(/'/g,"&#39;");
+      return `<details class="q-folder"${openSet.has(q)?" open":""} ontoggle="homeFolderToggle('${qAttr}',this.open)">
+        <summary><span>📁</span><span>${escHtml(q)}</span><span class="q-count">${cnt(list.length)}</span><span class="q-chev">▶</span></summary>
+        <div class="q-body">${list.map(s=>homeCard(s,fmtDate)).join("")}</div>
+      </details>`;
+    }).join("");
+  }
+  return html;
+}
 function renderHome(){
   document.getElementById("home-link").innerHTML="";
   document.getElementById("steps-indicator").innerHTML="";
@@ -892,16 +946,7 @@ function renderHome(){
       <button class="home-resume-btn" onclick="resetAll()" style="white-space:nowrap">+ New Report</button>
     </div>
     ${saves.length===0?`<div style="text-align:center;padding:40px 0;color:#9ca3af;font-size:14px">No saved reports yet.</div>`
-    :saves.map(s=>`
-      <div class="home-card">
-        <div style="flex:1;min-width:0">
-          <div class="home-prop">${s.propertyName||"Unnamed"} <span style="font-size:11px;font-weight:600;background:#fdf8ec;color:#96771f;padding:2px 8px;border-radius:4px;margin-left:6px">${s.quarter||""}</span>${s.source==="investment"?`<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;background:#f3e8ff;color:#7c3aed;margin-left:6px">INVESTMENT</span>`:""}</div>
-          <div class="home-meta">Saved ${fmtDate(s.savedAt||"")} &nbsp;·&nbsp; Step ${(s.step||0)+1} of 3</div>
-        </div>
-        <button class="home-resume-btn" onclick="loadSave('${s.key}')">Resume →</button>
-        <button class="home-nextq-btn" onclick="startNextQuarter('${s.key}')" title="Start the next quarter's report, carrying forward property/investment info and this quarter's numbers as the prior-quarter comparison">+ Next Quarter</button>
-        <button class="home-delete-btn" onclick="deleteSave('${s.key}')">Delete</button>
-      </div>`).join("")}
+    :homeGroupedList(saves,fmtDate)}
     <div style="margin-top:16px;display:flex;gap:10px">
       <button class="btn-home" onclick="downloadBackup()" style="font-size:12px">⬇ Download Backup</button>
       <button class="btn-home" onclick="restoreBackup()" style="font-size:12px">⬆ Restore Backup</button>
@@ -1200,9 +1245,9 @@ const genNarratives = m => {
 };
 // ─── REPORT HTML ─────────────────────────────────────────────────────────────
 const buildReport = (m, n, chartSrc, photo, propertyName, quarter, prevLabel, assetFacts, prevMetricsOverride) => {
-  const prop = propertyName || "Property";
-  const qtr = quarter || "";
-  const prevLbl = prevLabel || "Prior Quarter";
+  const prop = escHtml(propertyName || "Property");
+  const qtr = escHtml(quarter || "");
+  const prevLbl = escHtml(prevLabel || "Prior Quarter");
   const prev = prevMetricsOverride || state.prevMetrics || PREV_SAFE;
   // Rows per income statement continuation page. Each row ~27px; ~820px available → ~30 rows.
   // Using 28 to stay safely within one printed page per chunk.
@@ -1356,7 +1401,7 @@ ${(()=>{
   const MAX_PAGE2_CHARS=700; // leaves headroom for the summary table above
   let _running=0, _splitAt=_sections.length;
   for(let i=0;i<_sections.length;i++){_running+=_sections[i].text.length;if(_running>MAX_PAGE2_CHARS){_splitAt=i;break;}}
-  const _renderSec=s=>`<div class="ns"><div class="nl">${s.label}</div><p class="nt">${s.text}</p></div>`;
+  const _renderSec=s=>`<div class="ns"><div class="nl">${s.label}</div><p class="nt">${escHtml(s.text)}</p></div>`;
   const page2Sections=_sections.slice(0,_splitAt), page2bSections=_sections.slice(_splitAt);
   const page2=`<div class="page">
   <div class="pn">${prop}</div><div class="sh">Summary</div>
@@ -1377,7 +1422,7 @@ ${(()=>{
 })()}
 <div class="page">
   <div class="pn">${prop}</div><div class="sh">Asset Overview</div>
-  ${(()=>{const af=assetFacts||state.assetFacts||{};const dash="—";return'<div class="af"><h3>Asset Facts</h3><div class="ag">'+'<div><div class="al">Units</div><div class="av">'+(af.units||"—")+'</div></div>'+'<div><div class="al">Square Footage</div><div class="av">'+(af.sqft||dash)+'</div></div>'+'<div><div class="al">Purchased</div><div class="av">'+(af.purchased||dash)+'</div></div>'+'<div><div class="al">Year Built</div><div class="av">'+(af.yearBuilt||dash)+'</div></div>'+'<div><div class="al">Address</div><div class="av">'+(af.address||dash)+'</div></div>'+'<div><div class="al">City / State</div><div class="av">'+(af.cityState||dash)+'</div></div>'+'</div></div>';})()}
+  ${(()=>{const af=Object.fromEntries(Object.entries(assetFacts||state.assetFacts||{}).map(([k,v])=>[k,typeof v==="string"?escHtml(v):v]));const dash="—";return'<div class="af"><h3>Asset Facts</h3><div class="ag">'+'<div><div class="al">Units</div><div class="av">'+(af.units||"—")+'</div></div>'+'<div><div class="al">Square Footage</div><div class="av">'+(af.sqft||dash)+'</div></div>'+'<div><div class="al">Purchased</div><div class="av">'+(af.purchased||dash)+'</div></div>'+'<div><div class="al">Year Built</div><div class="av">'+(af.yearBuilt||dash)+'</div></div>'+'<div><div class="al">Address</div><div class="av">'+(af.address||dash)+'</div></div>'+'<div><div class="al">City / State</div><div class="av">'+(af.cityState||dash)+'</div></div>'+'</div></div>';})()}
   <div class="sh">Snapshot — ${qtr}</div>
   <div class="sg">
     <div class="sc hl"><div class="sl">Total Income</div><div class="sv">${fmtWhole(m.totalIncome)}</div></div>
@@ -1459,7 +1504,7 @@ ${(()=>{
   const firstChunk = allItems.slice(0, CAPEX_PER_PAGE);
   const extraChunks = [];
   for(let i=CAPEX_PER_PAGE; i<allItems.length; i+=CAPEX_PER_PAGE) extraChunks.push(allItems.slice(i,i+CAPEX_PER_PAGE));
-  const capexRow = i => `<tr><td>${i.name}</td><td>${fmtWhole(i.amount)}</td></tr>`;
+  const capexRow = i => `<tr><td>${escHtml(i.name)}</td><td>${fmtWhole(i.amount)}</td></tr>`;
   let out = `<div class="page">
   <div class="pn">${prop}</div><div class="sh">Capital Improvements — ${qtr}</div>
   <table class="cx"><tbody>
@@ -1879,8 +1924,8 @@ async function rewriteNarrativesWithAI(kind){
 }
 function buildInvestmentReport(m,n,invName,quarter,loan,sections){
   const sec={loanPrincipal:true,writeoffs:true,financialCharts:true,leasingSection:true,...(sections||{})};
-  const inv=invName||"Investment";
-  const qtr=quarter||"";
+  const inv=escHtml(invName||"Investment");
+  const qtr=escHtml(quarter||"");
   const yr=qtr.match(/\d{4}/)?.[0]||"";
   const prevYrNum=yr?parseInt(yr)-1:null;
   // Auto-incrementing page counter — page 1 is the cover (no number shown).
@@ -1904,7 +1949,7 @@ function buildInvestmentReport(m,n,invName,quarter,loan,sections){
   const photoStrip=n_photos>0?`<div style="margin-top:36px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap;max-width:660px">
     ${propPhotos.map(p=>`<div style="text-align:center;flex-shrink:0">
       <img src="${p.photo}" style="width:${thumbW}px;height:${thumbH}px;object-fit:cover;border-radius:8px;border:2px solid rgba(184,148,42,0.5);display:block"/>
-      <div style="font-size:9px;color:rgba(255,255,255,0.55);margin-top:6px;font-family:sans-serif;letter-spacing:1.5px;text-transform:uppercase;max-width:${thumbW}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
+      <div style="font-size:9px;color:rgba(255,255,255,0.55);margin-top:6px;font-family:sans-serif;letter-spacing:1.5px;text-transform:uppercase;max-width:${thumbW}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.name)}</div>
     </div>`).join("")}
   </div>`:"";
   return `<!DOCTYPE html>
@@ -1994,7 +2039,7 @@ ${(()=>{
   const MAX_PAGE2_CHARS=650; // leaves headroom for the summary table above
   let _running=0, _splitAt=_sections.length;
   for(let i=0;i<_sections.length;i++){_running+=_sections[i].text.length;if(_running>MAX_PAGE2_CHARS){_splitAt=i;break;}}
-  const _renderSec=s=>`<div class="ns"><div class="nl">${s.label}</div><p class="nt">${s.text}</p></div>`;
+  const _renderSec=s=>`<div class="ns"><div class="nl">${s.label}</div><p class="nt">${escHtml(s.text)}</p></div>`;
   const page2Sections=_sections.slice(0,_splitAt), page2bSections=_sections.slice(_splitAt);
   const page2=`<div class="page">
   <div class="pn">${inv}</div><div class="sh">Summary — ${qtr}</div>

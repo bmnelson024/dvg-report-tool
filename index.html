@@ -298,10 +298,21 @@ async function sbAuth(grant,body){
 }
 async function sbToken(force){
   if(!_sbSession)throw new Error("Not signed in.");
+  // Another open tab may have refreshed (and rotated) the token already: adopt its newer session first
+  const adoptStored=()=>{try{const st=JSON.parse(localStorage.getItem(SB_SESSION_KEY)||"null");
+    if(st&&st.refresh_token&&st.refresh_token!==_sbSession.refresh_token&&st.expires_at>_sbSession.expires_at){_sbSession=st;return true;}}catch(e){}return false;};
   if(force||Date.now()>_sbSession.expires_at-60000){
+    if(adoptStored()&&Date.now()<_sbSession.expires_at-60000)return _sbSession.access_token;
     if(!_sbRefreshing){
-      _sbRefreshing=sbAuth("refresh_token",{refresh_token:_sbSession.refresh_token})
-        .catch(e=>{if(!e.offline){_sbSession=null;sbStoreSession();const x=new Error("Your cloud sign-in expired. Click the cloud badge to sign in again.");x.signedOut=true;throw x;}throw e;})
+      const usedToken=_sbSession.refresh_token;
+      _sbRefreshing=sbAuth("refresh_token",{refresh_token:usedToken})
+        .catch(e=>{
+          if(e.offline)throw e;
+          // Refresh token already used by another tab? Take that tab's session instead of signing out.
+          if(adoptStored()&&_sbSession.refresh_token!==usedToken)return;
+          _sbSession=null;sbStoreSession();
+          const x=new Error("Your cloud sign-in expired. Click the cloud badge to sign in again.");x.signedOut=true;throw x;
+        })
         .finally(()=>{_sbRefreshing=null;});
     }
     await _sbRefreshing;
@@ -337,6 +348,7 @@ function sbMergeIndex(localStr,cloudStr,cloudKeys){
 
 async function sbSync(){
   if(!sbConfigured()||!_sbSession||_sbPulling)return;
+  if(_sbFlushing){_sbPulled=false;setTimeout(sbSync,400);return;} // wait for the in-flight upload to finish
   clearTimeout(_sbRetryTimer);
   _sbPulling=true;sbSetStatus("syncing");
   try{
@@ -382,7 +394,7 @@ async function sbSync(){
 
 async function sbFlush(){
   clearTimeout(_sbFlushTimer);
-  if(_sbFlushing||!_sbSession||!_sbPulled)return;
+  if(_sbFlushing||_sbPulling||!_sbSession||!_sbPulled)return;
   const snap=Object.entries(_sbPending);
   if(!snap.length){sbSetStatus("synced");return;}
   _sbFlushing=true;sbSetStatus("syncing");
@@ -394,10 +406,16 @@ async function sbFlush(){
       done.push([k,p.seq]);
     }
     let batch=[],bkeys=[],size=0;
+    const post=rows=>sbRest("dv_items?on_conflict=user_id,key",{method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify(rows)});
+    let tooBig=[];
     const send=async()=>{
       if(!batch.length)return;
-      await sbRest("dv_items?on_conflict=user_id,key",{method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify(batch)});
-      done.push(...bkeys);batch=[];bkeys=[];size=0;
+      try{await post(batch);done.push(...bkeys);}
+      catch(e){
+        if(e.status!==413||batch.length===1){if(e.status===413){tooBig.push(bkeys[0][0]);}else throw e;}
+        else{for(let i=0;i<batch.length;i++){try{await post([batch[i]]);done.push(bkeys[i]);}catch(e2){if(e2.status===413)tooBig.push(bkeys[i][0]);else throw e2;}}}
+      }
+      batch=[];bkeys=[];size=0;
     };
     for(const [k,p] of snap){
       if(p.op!=="set")continue;
@@ -411,6 +429,7 @@ async function sbFlush(){
     done.forEach(([k,seq])=>{if(_sbPending[k]&&_sbPending[k].seq===seq)delete _sbPending[k];});
     sbStorePending();
     _sbFlushing=false;
+    if(tooBig.length){sbFail({message:"These items are too large to upload and stay saved in this browser only: "+tooBig.join(", ")+". Try a smaller property photo or chart images."},sbFlush);return;}
     if(Object.keys(_sbPending).length)sbFlush();else sbSetStatus("synced");
   }catch(e){
     _sbFlushing=false;
@@ -891,6 +910,7 @@ function showToast(msg){
 // Open/closed folder state is a per-browser convenience (dvui_ prefix keeps it out of sync + backups).
 const HOME_OPEN_KEY="dvui_open_quarters";
 function quarterSortVal(q){const m=String(q||"").match(/Q([1-4])\s*(\d{4})/i);return m?parseInt(m[2])*10+parseInt(m[1]):-1;}
+function quarterLabelNorm(q){const m=String(q||"").match(/Q([1-4])\s*(\d{4})/i);return m?"Q"+m[1]+" "+m[2]:"Other";}
 function homeOpenQuarters(){try{return JSON.parse(localStorage.getItem(HOME_OPEN_KEY)||"[]");}catch(e){return[];}}
 function homeFolderToggle(q,open){try{const set=new Set(homeOpenQuarters());open?set.add(q):set.delete(q);localStorage.setItem(HOME_OPEN_KEY,JSON.stringify([...set]));}catch(e){}}
 function homeCard(s,fmtDate){return `
@@ -905,7 +925,7 @@ function homeCard(s,fmtDate){return `
       </div>`;}
 function homeGroupedList(saves,fmtDate){
   const groups={};
-  saves.forEach(s=>{const q=quarterSortVal(s.quarter)>0?String(s.quarter).trim():"Other";(groups[q]=groups[q]||[]).push(s);});
+  saves.forEach(s=>{const q=quarterLabelNorm(s.quarter);(groups[q]=groups[q]||[]).push(s);});
   const order=Object.keys(groups).sort((a,b)=>quarterSortVal(b)-quarterSortVal(a));
   const byName=(a,b)=>(a.propertyName||"").localeCompare(b.propertyName||"",undefined,{sensitivity:"base"});
   const cnt=n=>n+" report"+(n===1?"":"s");
@@ -918,8 +938,7 @@ function homeGroupedList(saves,fmtDate){
     html+=`<div class="q-prev-label">Previous Quarters</div>`;
     html+=older.map(q=>{
       const list=groups[q].sort(byName);
-      const qAttr=escHtml(q).replace(/'/g,"&#39;");
-      return `<details class="q-folder"${openSet.has(q)?" open":""} ontoggle="homeFolderToggle('${qAttr}',this.open)">
+      return `<details class="q-folder"${openSet.has(q)?" open":""} data-q="${escHtml(q)}" ontoggle="homeFolderToggle(this.dataset.q,this.open)">
         <summary><span>📁</span><span>${escHtml(q)}</span><span class="q-count">${cnt(list.length)}</span><span class="q-chev">▶</span></summary>
         <div class="q-body">${list.map(s=>homeCard(s,fmtDate)).join("")}</div>
       </details>`;
